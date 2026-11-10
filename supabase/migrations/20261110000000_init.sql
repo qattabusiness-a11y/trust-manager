@@ -6,7 +6,7 @@
 -- There is deliberately NO table for receipt images.
 -- =====================================================================
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto;  -- on Supabase this lives in the "extensions" schema
 
 -- ------------------------------------------------------------ helpers
 create or replace function public.set_updated_at() returns trigger
@@ -566,14 +566,14 @@ end $$;
 
 create or replace function public.lookup_invitation(p_token text)
 returns table (id uuid, household_id uuid, household_name text, email text, role text, status text, expires_at timestamptz)
-language sql stable security definer set search_path = public as $$
+language sql stable security definer set search_path = public, extensions as $$
   select i.id, i.household_id, h.name, i.email, i.role, i.status, i.expires_at
   from household_invitations i join households h on h.id = i.household_id
   where i.token_hash = encode(digest(p_token, 'sha256'), 'hex')
 $$;
 
 create or replace function public.accept_invitation(p_token text)
-returns uuid language plpgsql security definer set search_path = public as $$
+returns uuid language plpgsql security definer set search_path = public, extensions as $$
 declare inv household_invitations; uid uuid := auth.uid(); p profiles;
 begin
   if uid is null then raise exception 'Please sign in first'; end if;
