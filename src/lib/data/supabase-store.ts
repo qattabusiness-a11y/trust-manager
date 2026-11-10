@@ -50,16 +50,24 @@ export class SupabaseStore implements DataStore {
   }
 
   private async rawSelect<K extends CollectionKey>(k: K, match?: Partial<Row<K>>): Promise<Row<K>[]> {
-    let q = this.sb.from(TABLES[k]).select("*");
-    if (match) {
-      for (const [key, value] of Object.entries(match)) {
-        if (value === undefined) continue;
-        q = value === null ? q.is(toSnake(key), null) : q.eq(toSnake(key), value as string);
+    // PostgREST caps each response (1,000 rows by default), so page through results.
+    const PAGE = 1000;
+    const out: Row<K>[] = [];
+    for (let from = 0; ; from += PAGE) {
+      let q = this.sb.from(TABLES[k]).select("*");
+      if (match) {
+        for (const [key, value] of Object.entries(match)) {
+          if (value === undefined) continue;
+          q = value === null ? q.is(toSnake(key), null) : q.eq(toSnake(key), value as string);
+        }
       }
+      const { data, error } = await q.order("id").range(from, from + PAGE - 1);
+      this.fail(error);
+      const rows = data ?? [];
+      out.push(...rows.map((r) => mapKeys(r, toCamel) as unknown as Row<K>));
+      if (rows.length < PAGE) break;
     }
-    const { data, error } = await q;
-    this.fail(error);
-    return (data ?? []).map((r) => mapKeys(r, toCamel) as unknown as Row<K>);
+    return out;
   }
 
   async getById<K extends CollectionKey>(k: K, id: string): Promise<Row<K> | null> {
