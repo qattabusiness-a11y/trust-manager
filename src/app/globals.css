@@ -1,26 +1,73 @@
 @import "tailwindcss";
 
+/* Trust Manager design tokens */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --tm-green: #16a34a;
+  --tm-green-dark: #15803d;
+  --tm-green-light: #dcfce7;
+  --tm-yellow: #eab308;
+  --tm-yellow-dark: #a16207;
+  --tm-yellow-light: #fef9c3;
+  --tm-red: #dc2626;
+  --tm-red-light: #fee2e2;
+  --tm-navy: #172554;
+  --tm-navy-soft: #1e3a8a;
+  --tm-bg: #f8fafc;
+  --tm-surface: #ffffff;
+  --tm-muted: #64748b;
+  --tm-border: #e2e8f0;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-brand: var(--tm-green);
+  --color-brand-dark: var(--tm-green-dark);
+  --color-brand-light: var(--tm-green-light);
+  --color-warn: var(--tm-yellow);
+  --color-warn-dark: var(--tm-yellow-dark);
+  --color-warn-light: var(--tm-yellow-light);
+  --color-danger: var(--tm-red);
+  --color-danger-light: var(--tm-red-light);
+  --color-navy: var(--tm-navy);
+  --color-navy-soft: var(--tm-navy-soft);
+  --color-canvas: var(--tm-bg);
+  --color-surface: var(--tm-surface);
+  --color-muted: var(--tm-muted);
+  --color-line: var(--tm-border);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html,
+body {
+  background: var(--tm-bg);
+  color: var(--tm-navy);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+.money {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+.sidebar-texture {
+  background-color: var(--tm-navy);
+  background-image:
+    radial-gradient(circle at 20% 0%, rgba(22, 163, 74, 0.22), transparent 45%),
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px, 24px 24px;
+}
+
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media print {
+  aside,
+  nav {
+    display: none !important;
+  }
 }
