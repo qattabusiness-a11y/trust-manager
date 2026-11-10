@@ -11,7 +11,6 @@ import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/inputs";
 import { isDevDataMode } from "@/config/env";
-import { DEMO_PASSWORD, DEMO_USERS } from "@/lib/data/seed";
 import { setPendingInvite } from "@/lib/pending-invite";
 import { loginSchema } from "@/lib/validations";
 import { login } from "@/services/auth.service";
@@ -61,28 +60,6 @@ export function LoginForm() {
         New to Trust Manager? <Link className="font-medium text-brand-dark hover:underline" href="/register">Create an account</Link>
       </p>
 
-      {isDevDataMode() && (
-        <div className="mt-8 rounded-xl border border-warn/40 bg-warn-light/60 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-warn-dark">Development mode · sample household</p>
-          <p className="mt-1 text-xs text-warn-dark/80">Try the demo as different household roles (password: {DEMO_PASSWORD}).</p>
-          <div className="mt-3 grid gap-2">
-            {[
-              { u: DEMO_USERS.owner, role: "Owner — full access" },
-              { u: DEMO_USERS.admin, role: "Administrator" },
-              { u: DEMO_USERS.contributor, role: "Contributor — groceries only, no balances" },
-            ].map(({ u, role }) => (
-              <button
-                key={u.id}
-                type="button"
-                className="rounded-lg border border-warn/30 bg-white px-3 py-2 text-left text-xs hover:border-warn"
-                onClick={() => void submit({ email: u.email, password: DEMO_PASSWORD })}
-              >
-                <span className="font-semibold text-navy">{u.name}</span> <span className="text-muted">· {role}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

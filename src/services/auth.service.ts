@@ -199,7 +199,7 @@ export async function acceptInvitation(token: string, userId: string): Promise<s
 
 /** Sends a password-reset link (Supabase mode). Never reveals whether the email exists. */
 export async function requestPasswordReset(email: string): Promise<void> {
-  if (!isSupabaseConfigured()) throw new Error("Password reset by email needs the live database. In development mode, use Settings → Reset demo data.");
+  if (!isSupabaseConfigured()) throw new Error("Password reset by email needs the live database. In offline mode there is no email service; ask the household owner to set up the online database.");
   const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
     redirectTo: `${window.location.origin}/reset-password`,
   });

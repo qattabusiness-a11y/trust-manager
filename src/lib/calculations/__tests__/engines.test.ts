@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 import { CAT, DEFAULT_THRESHOLDS } from "@/constants";
-import { buildDemoDb } from "@/lib/data/seed";
+import { buildDemoDb } from "@/test-fixtures/demo-household";
 import { formatMoney, roundUpTo } from "@/lib/money";
 import { effectivePermissions } from "@/lib/permissions";
 import type { Budget, Household, MarketComparison, MarketProduct, Transaction } from "@/types";

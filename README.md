@@ -2,7 +2,7 @@
 
 AI-powered household financial management for households in Rwanda and beyond. Track money in and out, follow daily/weekly/monthly budgets, scan MoMo and bank receipts (images are never stored), compare shopping plans against market prices, get bulk-buy and savings suggestions, manage bills and subscriptions, and share the household with family members under fine-grained permissions.
 
-> **For real users, connect Supabase** (section 2). Without Supabase keys the app starts in a development mode that keeps data in your browser and includes a sample household for trying things out; that mode is labeled everywhere and is never used once Supabase is connected.
+> **For real users, connect Supabase** (section 2) so accounts and data work on every phone and computer. Without Supabase keys the app runs in an offline mode that keeps data only in that browser. It starts empty either way: there is no sample household.
 
 ---
 
@@ -18,15 +18,7 @@ npm run dev
 
 Open **http://localhost:3000**.
 
-### Demo accounts (password `demo1234`)
-
-| Account | Role | What it shows |
-|---|---|---|
-| aline@demo.trustmanager.rw | Owner | Everything |
-| eric@demo.trustmanager.rw | Administrator | Shared expenses, no owner-only settings |
-| keza@demo.trustmanager.rw | Contributor | Groceries only — no transactions or balances |
-
-You can also **Create an account** to go through the mandatory 5-step onboarding with your own numbers. **Settings → Reset demo data** restores the sample household at any time.
+Click **Create an account** and go through the 5-step setup with your own numbers. In offline mode, **Settings → Erase data on this device** wipes everything stored in that browser.
 
 ### Useful commands
 
@@ -34,9 +26,9 @@ You can also **Create an account** to go through the mandatory 5-step onboarding
 |---|---|
 | `npm run dev` | Start the app in development |
 | `npm run build && npm start` | Production build and server |
-| `npm test` | Unit tests (budget, classification, prediction, bulk-buy, permissions, OCR cleanup, seed) |
+| `npm test` | Unit tests (budget, classification, prediction, bulk-buy, permissions, receipt and statement reading, assistant) |
 | `npm run typecheck` / `npm run lint` | Type and lint checks |
-| `npm run db:seed-sql` | Regenerate `supabase/seed.sql` (categories + demo market index) |
+| `npm run db:seed-sql` | Regenerate `supabase/seed.sql` (categories + product list, no prices) |
 
 ---
 
@@ -108,10 +100,20 @@ supabase/
 | Service | What runs today |
 |---|---|
 | Receipt reading (`OCRService`) | **Real, on the device**: Tesseract (WebAssembly) reads the image in the browser, then a parser extracts amount, payee, date, reference, fee and balance from MoMo, Airtel, bank and shop receipts |
-| Market prices (`MarketPriceProvider`) | **Real prices your household records** ("Record a price", or automatically when you mark a shopping item bought). The sample index exists only in development mode |
+| Market prices (`MarketPriceProvider`) | **Real prices your household records** ("Record a price", or automatically when you mark a shopping item bought). |
 | Advisor (`FinancialAdvisor`) | Rules over your real records; facts and estimates are shown separately |
 | Notifications (`NotificationService`) | In-app notifications are real; email/push have no provider yet |
 | Savings transfers (`SavingsTransferService`) | Recorded inside Trust Manager only — no MoMo or bank money is moved |
+
+### Assistant (AI button, bottom right)
+
+Tell it your day in English or Kinyarwanda ("I spent 5,000 on transport and 12k on groceries", "Naguze isukari 3000", "Save 20000 for school fees", "Rent 150,000 every month on the 5th", "Sugar costs 1,800 at Kimironko"). It turns each part into a record (expense, income, saving, shopping item, market price or bill) and **saves it straight away** when every detail is there; anything missing (a price, an amount) stays as a card to fill in. Receipts and statements are shown for checking first. Each record is saved to its own page through the same checks and permissions as the normal forms, and every total and chart updates from those records. You can also attach a receipt photo (read on the device), or a bank/MoMo statement as CSV or TXT (duplicates of records you already have are unticked). Questions like "How much did I spend this week?" are answered from your real figures.
+
+Today the assistant runs entirely in the app. To plug in an AI provider later, implement `POST /api/assistant` (`src/app/api/assistant/route.ts`): it receives `{ message, context }` and must return `{ drafts, questions }` in the shapes defined in `src/lib/assistant/types.ts`. Until it does, the route answers `{ configured: false }` and the built-in reader is used, so nothing breaks.
+
+### Currency and language
+
+The coin button at the top shows every amount in another currency (USD, EUR, KES, UGX…). Rates come from [Exchange Rate API](https://www.exchangerate-api.com) and refresh every 12 hours; if they can't be fetched you can type a rate yourself. Records are always stored in the household's currency, so switching never changes your data. The language button switches between English and Kinyarwanda (the Kinyarwanda text should be reviewed by a native speaker; anything not yet translated falls back to English).
 
 ### Receipt privacy (zero storage)
 

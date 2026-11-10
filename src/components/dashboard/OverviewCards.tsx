@@ -8,6 +8,7 @@ import { Progress } from "@/components/ui/misc";
 import { Hidden, StatusBadge, statusBar } from "@/components/shared";
 import type { FinanceSnapshot } from "@/lib/calculations/snapshot";
 import type { Budget } from "@/types";
+import { useT } from "@/i18n";
 import { cn, pct } from "@/lib/utils";
 
 function Tile({ icon: Icon, label, href, children, className }: { icon: React.ElementType; label: string; href?: string; children: React.ReactNode; className?: string }) {
@@ -27,20 +28,21 @@ export function OverviewCards({ s, budget, canBalances, canBudget }: { s: Financ
   const diff = s.balance - s.previousBalance;
   const b = s.budget;
   const target = budget?.savingsTarget ?? 0;
+  const t = useT();
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <Tile icon={Wallet} label="Total available money" href={canBalances ? "/transactions" : undefined} className="xl:col-span-1">
+      <Tile icon={Wallet} label={t("card.available")} href={canBalances ? "/transactions" : undefined} className="xl:col-span-1">
         <Hidden visible={canBalances}>
           <p className={cn("money text-xl font-semibold 2xl:text-2xl", s.balance < 0 ? "text-danger" : "text-navy")}>{s.fmt(s.balance)}</p>
           <p className={cn("flex items-center gap-1 text-xs", diff >= 0 ? "text-brand-dark" : "text-danger")}>
             {diff >= 0 ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
-            {s.fmt(Math.abs(diff))} vs 7 days ago ({s.fmt(s.previousBalance)})
+            {t("card.vs7days", { amount: s.fmt(Math.abs(diff)), prev: s.fmt(s.previousBalance) })}
           </p>
-          <p className="text-[11px] text-muted">Updated {s.lastUpdated ? formatDistanceToNow(new Date(s.lastUpdated), { addSuffix: true }) : "—"} · recorded in Trust Manager</p>
+          <p className="text-[11px] text-muted">{t("card.updated", { when: s.lastUpdated ? formatDistanceToNow(new Date(s.lastUpdated), { addSuffix: true }) : "—" })}</p>
         </Hidden>
       </Tile>
 
-      <Tile icon={WalletCards} label="Monthly budget" href={canBudget ? "/budget" : undefined}>
+      <Tile icon={WalletCards} label={t("card.monthlyBudget")} href={canBudget ? "/budget" : undefined}>
         {b && canBudget ? (
           <>
             <div className="flex items-baseline justify-between gap-2">
@@ -49,7 +51,7 @@ export function OverviewCards({ s, budget, canBalances, canBudget }: { s: Financ
             </div>
             <Progress value={b.month.usedPct} tone={statusBar(b.month.status)} label="Monthly budget used" />
             <p className="text-xs text-muted">
-              <span className="money font-medium text-navy">{s.fmt(b.month.spent)}</span> spent of {s.fmt(b.month.limit)} · {Math.round(b.month.usedPct)}%
+              {t("card.spentOf", { spent: s.fmt(b.month.spent), limit: s.fmt(b.month.limit), pct: Math.round(b.month.usedPct) })}
             </p>
           </>
         ) : (
@@ -57,14 +59,14 @@ export function OverviewCards({ s, budget, canBalances, canBudget }: { s: Financ
         )}
       </Tile>
 
-      <Tile icon={CalendarDays} label="Safe to spend today" href={canBudget ? "/budget" : undefined}>
+      <Tile icon={CalendarDays} label={t("card.safeToday")} href={canBudget ? "/budget" : undefined}>
         {b && canBudget ? (
           <>
             <p className={cn("money text-xl font-semibold 2xl:text-2xl", b.day.over ? "text-danger" : "text-navy")}>{s.fmt(Math.max(0, Math.min(b.recommendedDaily, b.limits.daily) - b.day.spent))}</p>
             <Progress value={b.day.usedPct} tone={statusBar(b.day.status)} label="Today's limit used" />
             <p className="text-xs text-muted">
-              Spent today <span className="money font-medium text-navy">{s.fmt(b.day.spent)}</span> · limit {s.fmt(b.limits.daily)}
-              {b.recommendedDaily < b.limits.daily && <> · adjusted to {s.fmt(b.recommendedDaily)} for the rest of the month</>}
+              {t("card.spentToday", { spent: s.fmt(b.day.spent), limit: s.fmt(b.limits.daily) })}
+              {b.recommendedDaily < b.limits.daily && t("card.adjusted", { amount: s.fmt(b.recommendedDaily) })}
             </p>
           </>
         ) : (
@@ -72,17 +74,17 @@ export function OverviewCards({ s, budget, canBalances, canBudget }: { s: Financ
         )}
       </Tile>
 
-      <Tile icon={PiggyBank} label="Total savings" href={canBalances ? "/savings" : undefined}>
+      <Tile icon={PiggyBank} label={t("card.savings")} href={canBalances ? "/savings" : undefined}>
         <Hidden visible={canBalances}>
           <p className="money text-xl font-semibold 2xl:text-2xl text-brand-dark">{s.fmt(s.savings)}</p>
           {target > 0 && <Progress value={pct(s.savingsThisMonth, target)} label="Monthly savings target" />}
           <p className="text-xs text-muted">
-            {s.fmt(s.savingsThisMonth)} saved this month{target > 0 && <> of {s.fmt(target)} target</>}
+            {t("card.savedThisMonth", { amount: s.fmt(s.savingsThisMonth) })}{target > 0 && t("card.ofTarget", { target: s.fmt(target) })}
           </p>
         </Hidden>
       </Tile>
 
-      <Tile icon={HeartPulse} label="Financial health" href={canBudget ? "/advisor" : undefined}>
+      <Tile icon={HeartPulse} label={t("card.health")} href={canBudget ? "/advisor" : undefined}>
         <Hidden visible={canBudget}>
         <div className="flex items-center gap-3">
           <HealthRing score={s.health.score} status={s.health.status} />
@@ -92,8 +94,8 @@ export function OverviewCards({ s, budget, canBalances, canBudget }: { s: Financ
           </div>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted">
-          {b && <span>Budget: <strong className="text-navy capitalize">{b.month.status}</strong></span>}
-          <span>Active warnings: <strong className={s.health.warnings ? "text-danger" : "text-navy"}>{s.health.warnings}</strong></span>
+          {b && <span>{t("card.budgetStatus")} <strong className="text-navy capitalize">{b.month.status}</strong></span>}
+          <span>{t("card.warnings")} <strong className={s.health.warnings ? "text-danger" : "text-navy"}>{s.health.warnings}</strong></span>
         </div>
         </Hidden>
       </Tile>

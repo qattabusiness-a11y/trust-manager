@@ -1,5 +1,5 @@
 /** Measures how long the financial engines take with a large history. Run: npx tsx scripts/bench-snapshot.ts */
-import { buildDemoDb } from "../src/lib/data/seed";
+import { buildDemoDb } from "../src/test-fixtures/demo-household";
 import { buildSnapshot } from "../src/lib/calculations/snapshot";
 
 const NOW = new Date("2026-11-10T12:00:00Z");

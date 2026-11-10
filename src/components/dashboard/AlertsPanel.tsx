@@ -5,20 +5,22 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState, SEVERITY_STYLES } from "@/components/shared";
 import type { Alert } from "@/lib/calculations/snapshot";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 
 export function AlertsPanel({ alerts }: { alerts: Alert[] }) {
+  const t = useT();
   const order = { critical: 0, warning: 1, caution: 2, info: 3, success: 4 };
   const sorted = [...alerts].sort((a, b) => order[a.severity] - order[b.severity]);
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between">
-        <CardTitle>What needs your attention</CardTitle>
-        <span className="text-xs text-muted">{alerts.length} alert{alerts.length === 1 ? "" : "s"}</span>
+        <CardTitle>{t("alerts.title")}</CardTitle>
+        <span className="text-xs text-muted">{t("alerts.count", { n: alerts.length })}</span>
       </CardHeader>
       <CardContent>
         {sorted.length === 0 ? (
-          <EmptyState icon={Bell} title="Nothing to worry about right now" description="We'll warn you before small problems become big ones." />
+          <EmptyState icon={Bell} title={t("alerts.none")} description={t("alerts.noneBody")} />
         ) : (
           <ul className="space-y-2.5">
             {sorted.map((a) => {

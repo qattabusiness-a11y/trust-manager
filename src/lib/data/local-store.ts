@@ -2,7 +2,8 @@ import type { CollectionKey, CollectionMap, Row } from "./collections";
 import { matches, type DataStore } from "./store";
 
 export const LOCAL_DB_KEY = "tm:db:v1";
-export const LOCAL_DB_VERSION = 1;
+/** v2: offline mode no longer ships a sample household; older local data is replaced. */
+export const LOCAL_DB_VERSION = 2;
 
 export type LocalDB = { [K in CollectionKey]: CollectionMap[K][] } & { __version: number; __seededAt: string };
 

@@ -15,7 +15,7 @@ import { isSupabaseConfigured } from "@/config/env";
 import { useAction, useList } from "@/hooks/use-data";
 import { useFinance } from "@/hooks/use-finance";
 import { useSession } from "@/hooks/use-session";
-import { resetDemoData } from "@/lib/data/runtime";
+import { clearLocalData } from "@/lib/data/runtime";
 import { cn } from "@/lib/utils";
 import { deleteMyAccount, exportMyData } from "@/services/account.service";
 import { changePassword } from "@/services/auth.service";
@@ -103,15 +103,15 @@ export default function SettingsPage() {
       {dev && (
         <section id="demo" className="scroll-mt-20">
           <Card className="border-warn/50">
-            <CardHeader><CardTitle className="flex items-center gap-2"><FlaskConical className="size-4 text-warn-dark" /> Development mode</CardTitle>
-              <CardDescription>Data lives only in this browser (localStorage). OCR, market prices, the advisor, email/push and savings transfers use clearly labeled mock services. Set NEXT_PUBLIC_DATA_MODE=supabase with your Supabase keys to use the real database.</CardDescription></CardHeader>
-            <CardContent><Button variant="outline" onClick={() => setResetOpen(true)}><RotateCcw /> Reset demo data</Button></CardContent>
+            <CardHeader><CardTitle className="flex items-center gap-2"><FlaskConical className="size-4 text-warn-dark" /> Offline mode</CardTitle>
+              <CardDescription>This copy isn&apos;t connected to the online database, so everything is stored only in this browser and can&apos;t be shared with your household. Connect Supabase (see README) to use Trust Manager across phones and computers.</CardDescription></CardHeader>
+            <CardContent><Button variant="outline" onClick={() => setResetOpen(true)}><RotateCcw /> Erase data on this device</Button></CardContent>
           </Card>
         </section>
       )}
 
-      <ConfirmDialog open={resetOpen} onOpenChange={setResetOpen} title="Reset all demo data?" description="Every record in this browser is replaced with the original sample household. Any accounts you registered locally will be removed." confirmLabel="Reset demo data" danger
-        onConfirm={async () => { await resetDemoData(); signOut(); qc.clear(); setResetOpen(false); toast.success("Demo data reset. Sign in again with a demo account."); router.replace("/login"); }} />
+      <ConfirmDialog open={resetOpen} onOpenChange={setResetOpen} title="Erase all data on this device?" description="Every account and record stored in this browser is removed. This can't be undone." confirmLabel="Erase" danger
+        onConfirm={async () => { await clearLocalData(); signOut(); qc.clear(); setResetOpen(false); toast.success("Data on this device was erased."); router.replace("/register"); }} />
       <ConfirmDialog open={deleteOpen} onOpenChange={setDeleteOpen} title={dev ? "Delete your account?" : "Request account deletion?"} description={dev ? "Your profile and personal records are deleted. If you are the only member, the whole household's data is deleted too. This can't be undone." : "We'll delete your account and personal data. You'll be signed out."} confirmLabel="Delete" danger loading={pending}
         onConfirm={async () => { const r = await run((api) => deleteMyAccount(api)); signOut(); qc.clear(); toast.success(r === "deleted" ? "Account deleted." : "Deletion requested."); router.replace("/login"); }} />
     </div>

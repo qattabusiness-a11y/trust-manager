@@ -5,6 +5,7 @@ import { buildSnapshot, type FinanceData } from "@/lib/calculations/snapshot";
 import { isSupabaseConfigured } from "@/config/env";
 import { DEMO_MARKET_SOURCE } from "@/constants";
 import { monthKey } from "@/lib/dates";
+import { useDisplayConversion } from "@/components/layout/DisplaySettings";
 import { useList } from "./use-data";
 import { useSession } from "./use-session";
 
@@ -58,8 +59,11 @@ function useFinanceValue() {
     [household, persona, budget, transactions.data, categories.data, income.data, recurring.data, usage.data, accounts.data, goals.data, contributions.data, shopping.data, products.data, history.data],
   );
 
-  const snapshot = useMemo(() => buildSnapshot(data), [data]);
-  return { ...session, loading, error, data, snapshot, household, persona, budget, budgetIsCurrentMonth: budget?.month === currentMonth };
+  // Applied before the snapshot so its sentences ("…limit is about USD 4") use the chosen currency.
+  const display = useDisplayConversion(household?.currency ?? "RWF");
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- display.key changes the formatted text
+  const snapshot = useMemo(() => buildSnapshot(data), [data, display.key]);
+  return { ...session, loading, error, data, snapshot, display, household, persona, budget, budgetIsCurrentMonth: budget?.month === currentMonth };
 }
 
 type FinanceValue = ReturnType<typeof useFinanceValue>;

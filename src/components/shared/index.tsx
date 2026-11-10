@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Badge, Skeleton, type Tone } from "@/components/ui/misc";
 import type { SpendingStatus } from "@/lib/calculations/budget";
+import { useT } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { Behavior, Severity } from "@/types";
 
@@ -149,11 +150,12 @@ export function ConfirmDialog({
   );
 }
 
-export function Hidden({ children, visible, placeholder = "Hidden" }: { children: React.ReactNode; visible: boolean; placeholder?: string }) {
+export function Hidden({ children, visible, placeholder }: { children: React.ReactNode; visible: boolean; placeholder?: string }) {
+  const t = useT();
   if (visible) return <>{children}</>;
   return (
     <span className="inline-flex items-center gap-1 text-muted" title="You don't have permission to view this">
-      <Lock className="size-3.5" /> {placeholder}
+      <Lock className="size-3.5" /> {placeholder ?? t("common.hidden")}
     </span>
   );
 }

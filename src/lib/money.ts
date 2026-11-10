@@ -11,6 +11,10 @@ const MINOR_UNIT_EXPONENT: Record<string, number> = {
   USD: 2,
   EUR: 2,
   GBP: 2,
+  CNY: 2,
+  AED: 2,
+  ZAR: 2,
+  CDF: 2,
 };
 
 export const SUPPORTED_CURRENCIES = Object.keys(MINOR_UNIT_EXPONENT);
@@ -29,11 +33,37 @@ export function toMajor(minor: number, currency: string): number {
   return minor / 10 ** minorExponent(currency);
 }
 
+/**
+ * Display conversion. Records are always stored in the household currency;
+ * when the person picks another display currency, amounts in the household
+ * currency are converted at the chosen rate only when they are shown.
+ */
+interface DisplayConversion {
+  base: string;
+  target: string;
+  /** Units of `target` per 1 unit of `base` (major units). */
+  rate: number;
+}
+let display: DisplayConversion | null = null;
+
+export function setDisplayConversion(next: DisplayConversion | null): void {
+  display = next && next.target !== next.base && next.rate > 0 ? next : null;
+}
+
+export function getDisplayConversion(): DisplayConversion | null {
+  return display;
+}
+
 export function formatMoney(
   minor: number,
   currency = "RWF",
-  opts: { compact?: boolean; sign?: boolean } = {},
+  opts: { compact?: boolean; sign?: boolean; raw?: boolean } = {},
 ): string {
+  if (display && !opts.raw && currency === display.base) {
+    const majorBase = minor / 10 ** minorExponent(currency);
+    const target = display.target;
+    return formatMoney(Math.round(majorBase * display.rate * 10 ** minorExponent(target)), target, { ...opts, raw: true });
+  }
   const exp = minorExponent(currency);
   const major = minor / 10 ** exp;
   const abs = Math.abs(major);

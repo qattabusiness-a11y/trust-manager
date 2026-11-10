@@ -1,3 +1,7 @@
+/**
+ * TEST FIXTURE ONLY — a fictional household used by unit tests and the
+ * benchmark script. The app never loads this: real users start empty.
+ */
 import { addDays, format, parseISO } from "date-fns";
 import { CAT, DEFAULT_THRESHOLDS, SYSTEM_CATEGORIES } from "@/constants";
 import { DEFAULT_TIMEZONE, localToUtcIso, monthKey, todayLocal } from "@/lib/dates";
@@ -16,8 +20,8 @@ import type {
   UserPreferences,
   VisionLedgerEntry,
 } from "@/types";
-import { emptyDb, type LocalDB } from "./local-store";
-import { buildMarketSeed, productId } from "./seed-market";
+import { emptyDb, type LocalDB } from "@/lib/data/local-store";
+import { buildMarketSeed, productId } from "@/lib/data/seed-market";
 
 /**
  * Deterministic demo data for a household of three in Kigali.

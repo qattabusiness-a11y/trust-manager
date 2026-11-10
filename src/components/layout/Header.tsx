@@ -15,14 +15,17 @@ import { cn, initials } from "@/lib/utils";
 import { logout } from "@/services/auth.service";
 import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/preferences.store";
+import { useT } from "@/i18n";
+import { CurrencySwitcher, LanguageSwitcher } from "./DisplaySettings";
 import { LogoMark } from "./Logo";
 import { NAV } from "./nav";
 
-export function Header() {
+export function Header({ baseCurrency }: { baseCurrency: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const qc = useQueryClient();
   const s = useSession();
+  const t = useT();
   const signOut = useAuthStore((st) => st.signOut);
   const setQuickAdd = useUIStore((st) => st.setQuickAdd);
   const setReceipt = useUIStore((st) => st.setReceiptOpen);
@@ -30,7 +33,8 @@ export function Header() {
   const { run } = useAction();
   const inApp = (notifications.data ?? []).filter((n) => n.channel === "in_app").sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const unread = inApp.filter((n) => !n.readAt);
-  const title = NAV.find((n) => pathname.startsWith(n.href))?.label ?? "Trust Manager";
+  const navItem = NAV.find((n) => pathname.startsWith(n.href));
+  const title = navItem ? t(navItem.t) : "Trust Manager";
   const dev = s.storeMode === "local";
 
   async function markAllRead() {
@@ -47,31 +51,38 @@ export function Header() {
   }
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-canvas/90 px-4 backdrop-blur sm:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-2 border-b sm:gap-3 border-line bg-canvas/90 px-4 backdrop-blur sm:px-6">
       <div className="flex min-w-0 flex-1 items-center gap-2">
-        <LogoMark className="size-8 lg:hidden" />
+        <Link href="/overview" aria-label={t("nav.goHome")} className="shrink-0 rounded-lg lg:hidden">
+          <LogoMark className="size-8" />
+        </Link>
         <span className="truncate text-sm font-semibold text-navy lg:hidden">{title}</span>
         {dev && (
-          <Link href="/settings#demo" className="hidden items-center gap-1.5 rounded-full border border-warn/40 bg-warn-light px-2.5 py-1 text-[11px] font-semibold text-warn-dark sm:inline-flex" title="Data is stored only in this browser. Market prices, OCR and transfers are simulated.">
-            <FlaskConical className="size-3.5" /> Development mode · sample data
+          <Link href="/settings#demo" className="hidden items-center gap-1.5 rounded-full border border-warn/40 bg-warn-light px-2.5 py-1 text-[11px] font-semibold text-warn-dark sm:inline-flex" title="Data is stored only in this browser. Connect the online database to share it with your household.">
+            <FlaskConical className="size-3.5" /> {t("header.devMode")}
           </Link>
         )}
       </div>
 
+      <div className="flex items-center gap-1.5">
+        <CurrencySwitcher baseCurrency={baseCurrency} />
+        <LanguageSwitcher />
+      </div>
+
       {s.can("add_transactions") && (
         <>
-          <Button variant="outline" size="sm" className="hidden sm:inline-flex" onClick={() => setReceipt(true)}>
-            <ScanLine /> Upload receipt
+          <Button variant="outline" size="sm" className="hidden xl:inline-flex" onClick={() => setReceipt(true)}>
+            <ScanLine /> {t("header.uploadReceipt")}
           </Button>
-          <Button size="sm" onClick={() => setQuickAdd(true)} aria-label="Add transaction">
-            <Plus /> <span className="hidden sm:inline">Add transaction</span>
+          <Button size="sm" onClick={() => setQuickAdd(true)} aria-label={t("header.addTransaction")}>
+            <Plus /> <span className="hidden md:inline">{t("header.addTransaction")}</span>
           </Button>
         </>
       )}
 
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild>
-          <button className="relative rounded-lg p-2 text-navy hover:bg-slate-100" aria-label={`Notifications (${unread.length} unread)`}>
+          <button className="relative rounded-lg p-2 text-navy hover:bg-slate-100" aria-label={`${t("header.notifications")} (${unread.length})`}>
             <Bell className="size-5" />
             {unread.length > 0 && <span className="absolute right-1 top-1 flex size-4 items-center justify-center rounded-full bg-danger text-[9px] font-bold text-white">{unread.length}</span>}
           </button>
@@ -79,15 +90,15 @@ export function Header() {
         <DropdownMenu.Portal>
           <DropdownMenu.Content align="end" sideOffset={8} className="z-50 w-[min(92vw,380px)] rounded-2xl border border-line bg-white shadow-xl">
             <div className="flex items-center justify-between border-b border-line px-4 py-3">
-              <p className="text-sm font-semibold">Notifications</p>
+              <p className="text-sm font-semibold">{t("header.notifications")}</p>
               {unread.length > 0 && (
                 <button className="flex items-center gap-1 text-xs text-brand-dark hover:underline" onClick={() => void markAllRead()}>
-                  <CheckCheck className="size-3.5" /> Mark all read
+                  <CheckCheck className="size-3.5" /> {t("header.markAllRead")}
                 </button>
               )}
             </div>
             <div className="max-h-[60vh] overflow-y-auto">
-              {inApp.length === 0 && <p className="p-6 text-center text-sm text-muted">You&apos;re all caught up.</p>}
+              {inApp.length === 0 && <p className="p-6 text-center text-sm text-muted">{t("header.caughtUp")}</p>}
               {inApp.slice(0, 20).map((n) => (
                 <DropdownMenu.Item
                   key={n.id}
@@ -125,10 +136,10 @@ export function Header() {
             </div>
             <DropdownMenu.Separator className="my-1 h-px bg-line" />
             <DropdownMenu.Item asChild className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none data-[highlighted]:bg-slate-50">
-              <Link href="/settings"><SettingsIcon className="size-4" /> Settings</Link>
+              <Link href="/settings"><SettingsIcon className="size-4" /> {t("header.settings")}</Link>
             </DropdownMenu.Item>
             <DropdownMenu.Item onSelect={() => void doLogout()} className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger outline-none data-[highlighted]:bg-danger-light/50">
-              <LogOut className="size-4" /> Sign out
+              <LogOut className="size-4" /> {t("header.signOut")}
             </DropdownMenu.Item>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
