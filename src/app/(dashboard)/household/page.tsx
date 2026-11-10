@@ -150,15 +150,17 @@ export default function HouseholdPage() {
       )}
 
       <Dialog open={inviteOpen} onOpenChange={(o) => { setInviteOpen(o); if (!o) setLink(null); }}>
-        <DialogContent title="Invite a household member" description="They'll get a secure link that expires in 7 days.">
+        <DialogContent title="Invite a household member" description="You'll get a secure link to send them. It expires in 7 days.">
           {link ? (
             <div className="space-y-4">
               <p className="text-sm">Share this link with them. For your security it is shown only once.</p>
               <div className="flex gap-2"><Input readOnly value={link} onFocus={(e) => e.target.select()} /><Button variant="outline" onClick={() => { void navigator.clipboard.writeText(link); toast.success("Link copied."); }}><Copy /> Copy</Button></div>
-              <p className="text-xs text-muted">Email delivery is simulated in development mode — no email was sent. Send the link yourself (e.g. WhatsApp or SMS).</p>
+              <p className="text-xs text-muted">Trust Manager does not email invitations. Send this link yourself, for example by WhatsApp or SMS.</p>
             </div>
           ) : (
             <InviteForm pending={pending} onSubmit={async (v) => {
+              if (active.some((m) => m.email.toLowerCase() === v.email)) return void toast.error("This person is already a member of your household.");
+              if (pendingInv.some((i) => i.email.toLowerCase() === v.email && new Date(i.expiresAt).getTime() > now)) return void toast.error("There is already a pending invitation for this email. Revoke it first to send a new one.");
               const { token, tokenHash, expiresAt } = await newInviteToken();
               await run(async (api) => {
                 await api.create("invitations", { householdId: api.actor.householdId!, email: v.email, role: v.role, tokenHash, expiresAt, invitedBy: api.actor.userId, status: "pending", acceptedBy: null });

@@ -1,5 +1,6 @@
 "use client";
 
+import { FinanceProvider } from "@/hooks/use-finance";
 import { AuthGate } from "./AuthGate";
 import { GlobalDialogs } from "./GlobalDialogs";
 import { Header, useUnreadCount } from "./Header";
@@ -26,7 +27,9 @@ function Shell({ children }: { children: React.ReactNode }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <AuthGate mode="app">
-      <Shell>{children}</Shell>
+      <FinanceProvider>
+        <Shell>{children}</Shell>
+      </FinanceProvider>
     </AuthGate>
   );
 }

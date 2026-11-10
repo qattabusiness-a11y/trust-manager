@@ -110,7 +110,7 @@ export function DemoDataBadge({ label = "DEMO DATA — Not verified live market 
 }
 
 export function SimulatedBadge() {
-  return <Badge tone="yellow">Simulated — no real money moved</Badge>;
+  return <Badge tone="yellow">Recorded here only — move the money yourself in MoMo or your bank</Badge>;
 }
 
 export function ConfirmDialog({

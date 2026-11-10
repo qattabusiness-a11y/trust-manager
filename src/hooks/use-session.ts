@@ -26,8 +26,12 @@ export function useSession() {
     enabled: hydrated && !!userId && !!storeQ.data,
     queryFn: async (): Promise<SessionData> => {
       const store = storeQ.data!;
-      const profile = await store.getById("profiles", userId!);
-      const memberships = (await store.select("householdMembers", { userId: userId! })).filter((m) => m.status === "active" && !m.deletedAt);
+      // Both lookups go out together: one network round trip instead of two.
+      const [profile, allMemberships] = await Promise.all([
+        store.getById("profiles", userId!),
+        store.select("householdMembers", { userId: userId! }),
+      ]);
+      const memberships = allMemberships.filter((m) => m.status === "active" && !m.deletedAt);
       const member = memberships.find((m) => m.householdId === householdId) ?? memberships[0] ?? null;
       return { profile, member, memberships };
     },

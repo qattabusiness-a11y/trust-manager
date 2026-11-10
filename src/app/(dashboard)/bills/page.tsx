@@ -73,7 +73,7 @@ export default function BillsPage() {
 
       <Card>
         <CardHeader className="flex-row items-center justify-between">
-          <div><CardTitle>Upcoming payments</CardTitle><CardDescription>Reminders go out at each payment&apos;s chosen intervals and on the due date. In-app reminders are real; email and push are simulated in this version.</CardDescription></div>
+          <div><CardTitle>Upcoming payments</CardTitle><CardDescription>You get a reminder in the app at each payment&apos;s chosen intervals and on the due date.</CardDescription></div>
           <Tabs value={view} onChange={setView} items={[{ value: "list", label: "List" }, { value: "calendar", label: "Calendar" }]} />
         </CardHeader>
         <CardContent>

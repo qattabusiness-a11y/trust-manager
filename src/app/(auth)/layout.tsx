@@ -1,7 +1,7 @@
 import { ShieldCheck, TrendingDown, Wallet } from "lucide-react";
 import { Logo, LogoFull } from "@/components/layout/Logo";
 
-export default function AuthLayout({ children }: LayoutProps<"/">) {
+export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
       <aside className="sidebar-texture relative hidden flex-col justify-between p-10 text-white lg:flex">

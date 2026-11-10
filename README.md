@@ -2,7 +2,7 @@
 
 AI-powered household financial management for households in Rwanda and beyond. Track money in and out, follow daily/weekly/monthly budgets, scan MoMo and bank receipts (images are never stored), compare shopping plans against market prices, get bulk-buy and savings suggestions, manage bills and subscriptions, and share the household with family members under fine-grained permissions.
 
-> **Development mode is the default.** Without Supabase keys the app runs entirely in your browser with a deterministic sample household, and every simulated service is labeled (market prices, OCR, advisor, email/push, savings transfers).
+> **For real users, connect Supabase** (section 2). Without Supabase keys the app starts in a development mode that keeps data in your browser and includes a sample household for trying things out; that mode is labeled everywhere and is never used once Supabase is connected.
 
 ---
 
@@ -43,7 +43,11 @@ You can also **Create an account** to go through the mandatory 5-step onboarding
 ## 2. Connect Supabase (real database & accounts)
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. In the **SQL Editor**, run `supabase/migrations/20261110000000_init.sql`, then `supabase/seed.sql`.
+2. In the **SQL Editor**, run these in order (each in a **New query**, choose **Run and enable RLS** if asked):
+   1. `supabase/migrations/20261110000000_init.sql` — tables, access rules, functions
+   2. `supabase/seed.sql` — spending categories and the shared product list (no prices)
+   3. `supabase/migrations/20261110170000_real_market_prices.sql` — lets households record real prices, removes the old demo prices, and adds the one-request loader that makes pages open faster. Safe to run more than once.
+
    (Or with the Supabase CLI: `supabase link` then `supabase db push`.)
 3. **Authentication → Providers → Email**: keep enabled. For quick testing you can turn off "Confirm email".
 4. Copy `.env.example` to `.env.local` and set:
@@ -71,14 +75,14 @@ Row Level Security is enabled and **forced** on every table. Household data is s
 ```
 src/
 ├── app/                      Next.js App Router
-│   ├── (auth)/               login · register · onboarding (mandatory)
+│   ├── (auth)/               login · register · forgot/reset password · onboarding (mandatory)
 │   ├── (dashboard)/          overview · transactions · budget · shopping · market · savings
 │   │                         bills · analytics · vision · household · advisor · settings
-│   ├── api/ocr               ephemeral receipt processing (in-memory, verified deletion)
 │   ├── api/transactions/validate   server-side validation for every transaction
 │   └── invite/[token]        secure, expiring household invitations
 ├── components/               ui kit (shadcn-style), layout, feature components, charts
 ├── lib/
+│   ├── receipts/             receipt text parser (MoMo, Airtel, bank, shop invoices)
 │   ├── calculations/         pure, unit-tested engines: balance, budget, classification,
 │   │                         prediction, schedule, market, bulk-buy, insights, snapshot
 │   ├── data/                 DataStore (LocalStore | SupabaseStore) + permission-aware API
@@ -86,12 +90,12 @@ src/
 │   └── validations/          Zod schemas shared by forms and API routes
 ├── services/                 OCR · market · advisor · notifications · savings transfer ·
 │                             auth · onboarding · budget · prediction · account
-├── server/                   server-only: OCR provider, temp store, rate limiting
+├── server/                   server-only helpers (rate limiting)
 ├── stores/                   Zustand (session pointer, UI state only)
 └── hooks/                    TanStack Query hooks (useList, useAction, useFinance)
 supabase/
 ├── migrations/               schema, triggers, RLS, RPCs
-├── seed.sql                  categories + DEMO market prices
+├── seed.sql                  categories + shared product list (no prices)
 └── tests/                    RLS scenario script
 ```
 
@@ -99,26 +103,35 @@ supabase/
 
 **All totals are derived** from transaction, budget and savings records through `buildSnapshot()` — there are no separately maintained counters.
 
-### Mock services (same interfaces as the future real ones)
+### Services (each behind an interface, so a provider can be swapped in)
 
-| Service | Contract | Development implementation |
-|---|---|---|
-| OCR | `OCRProvider` / `OCRService` | `MockOCRProvider` — deterministic output per image |
-| Market prices | `MarketPriceProvider` | `MockMarketPriceService` — labeled demo index |
-| Advisor | `FinancialAdvisor` | `MockFinancialAdvisor` — rules over your real records |
-| Notifications | `NotificationService` | in-app real; email/push stored as `simulated` |
-| Savings transfers | `SavingsTransferService` | records movements in-app only, labeled simulated |
+| Service | What runs today |
+|---|---|
+| Receipt reading (`OCRService`) | **Real, on the device**: Tesseract (WebAssembly) reads the image in the browser, then a parser extracts amount, payee, date, reference, fee and balance from MoMo, Airtel, bank and shop receipts |
+| Market prices (`MarketPriceProvider`) | **Real prices your household records** ("Record a price", or automatically when you mark a shopping item bought). The sample index exists only in development mode |
+| Advisor (`FinancialAdvisor`) | Rules over your real records; facts and estimates are shown separately |
+| Notifications (`NotificationService`) | In-app notifications are real; email/push have no provider yet |
+| Savings transfers (`SavingsTransferService`) | Recorded inside Trust Manager only — no MoMo or bank money is moved |
 
 ### Receipt privacy (zero storage)
 
-The browser sends the image to `/api/ocr`; the server validates type, size and magic bytes, holds the bytes **in memory only** with a 60-second TTL sweeper, extracts the data, zero-fills and deletes the buffer, and **verifies** the deletion in a `finally` block — also when extraction fails. The browser preview is an object URL revoked right after processing. Nothing image-related is written to localStorage, a database table, or logs. Receipts are never sent to third-party AI without consent (the route enforces a consent flag for any external provider).
+Receipts are read **on the person's own device**. The image is never uploaded — not to Trust Manager's server and not to any third party — and is never written to localStorage, IndexedDB or a database. The reading engine and English language data are served by the app itself (`public/ocr`, copied from `node_modules` by `scripts/copy-ocr-assets.mjs` before every `dev`/`build`). When reading finishes or fails, the worker is terminated and the working canvas wiped in a `finally` block, and that cleanup is verified before success is reported. Only the fields the person confirms are saved.
+
+### Speed
+
+- Every page's data arrives in **one request** (`batch_select`, which runs as the signed-in user so Row Level Security still applies). If the database hasn't been updated yet, the app falls back to one request per table automatically.
+- Sign-in lookups and the household/balance lookup run in parallel.
+- The financial snapshot is computed once and shared by every page; data stays fresh for 2 minutes, so moving between pages doesn't wait on the network, and saving refreshes only what changed.
+- Charts and the receipt reader load only when needed; the reader starts downloading as soon as the receipt dialog opens and is cached by the browser for a week.
+
+Measured with a 150 ms delay on every database request: cold dashboard open went from ~830 ms to ~470 ms, and requests per open from 21 to 5. Moving between pages takes 30–200 ms.
 
 ---
 
 ## Honest limits of this version
 
-- Market prices are a **simulated demo index**, not live data.
-- OCR is a mock reader; plug a real provider into `src/server/ocr.ts`.
-- Email/push delivery and MoMo/bank transfers are simulated and labeled as such.
+- There is no live feed of Kigali market prices; comparisons use the prices your household records.
+- Receipt reading works best on clear screenshots; every field is shown for checking before it is saved.
+- Email/push reminders have no delivery provider yet; in-app reminders work. MoMo/bank transfers are never made by the app.
 - In Supabase mode, account deletion is recorded as a request (`request_account_deletion`) for an operator job to complete, because auth users can only be deleted server-side.
 - The rate limiter is in-memory per server instance; use Redis/Upstash for multi-instance production.

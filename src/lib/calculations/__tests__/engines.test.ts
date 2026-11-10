@@ -111,7 +111,7 @@ describe("zero-balance prediction", () => {
 });
 
 describe("market & bulk-buy", () => {
-  const cmp: MarketComparison = { productId: "p", productName: "Rice", unit: "kg", average: 1_300, lowest: { price: 1200, marketName: "A", location: "x" }, highest: { price: 1400, marketName: "B", location: "y" }, thirtyDayAverage: 1_530, changePct: -10, source: "demo", recordedAt: "" };
+  const cmp: MarketComparison = { productId: "p", productName: "Rice", unit: "kg", average: 1_300, lowest: { price: 1200, marketName: "A", location: "x" }, highest: { price: 1400, marketName: "B", location: "y" }, thirtyDayAverage: 1_530, changePct: -10, source: "demo", recordedAt: "", verified: false, priceCount: 20 };
   const rice: MarketProduct = { id: "p", slug: "rice", name: "Rice", category: "Grains", unit: "kg", perishable: false, shelfLifeDays: 365, createdAt: "", updatedAt: "" };
   it("explains savings vs plan (RWF 1,500 planned, 1,300 market)", () => {
     const r = planVsMarket(1_500, 10, cmp, (v) => formatMoney(v, "RWF"));

@@ -1,12 +1,13 @@
 import { addDays } from "date-fns";
 import type { MarketPricePoint, MarketProduct } from "@/types";
+import { DEMO_MARKET_SOURCE } from "@/constants";
 import { stableHash } from "@/lib/utils";
 
 /**
  * Illustrative market index for Rwanda. These are SIMULATED prices for
  * development and demos — not verified live market prices.
  */
-export const DEMO_MARKET_SOURCE = "Trust Manager demo index (simulated)";
+export { DEMO_MARKET_SOURCE };
 
 interface ProductSeed {
   slug: string;

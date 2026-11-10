@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowDownRight, ArrowUpRight, Boxes, PackageCheck } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BadgeCheck, Boxes, PackageCheck, Plus, Store, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { PriceHistoryChart } from "@/components/analytics/charts";
+import { PriceHistoryChart } from "@/components/analytics/lazy";
 import { DemoDataBadge, EmptyState, ErrorState, LoadingState, PageHeader } from "@/components/shared";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -13,7 +13,9 @@ import type { BulkBuyResult } from "@/lib/calculations/bulkbuy";
 import { compareProduct, latestPrices, priceSeries } from "@/lib/calculations/market";
 import { fmtDate } from "@/lib/dates";
 import { cn } from "@/lib/utils";
-import { MockMarketPriceService } from "@/services/market.service";
+import { RecordPriceForm } from "@/components/market/RecordPriceForm";
+import { Button } from "@/components/ui/button";
+import { useAction } from "@/hooks/use-data";
 import type { MarketComparison, MarketProduct } from "@/types";
 
 export default function MarketPage() {
@@ -22,8 +24,9 @@ export default function MarketPage() {
   const [category, setCategory] = useState("");
   const [location, setLocation] = useState("");
   const [open, setOpen] = useState<MarketProduct | null>(null);
+  const [recording, setRecording] = useState<{ productId?: string } | null>(null);
+  const { run } = useAction();
 
-  const provider = useMemo(() => new MockMarketPriceService(f.data.marketProducts, f.data.marketHistory, s.currency), [f.data.marketProducts, f.data.marketHistory, s.currency]);
   const current = useMemo(() => latestPrices(f.data.marketProducts, f.data.marketHistory, s.currency), [f.data.marketProducts, f.data.marketHistory, s.currency]);
   const rows = useMemo(() => {
     return f.data.marketProducts
@@ -43,6 +46,10 @@ export default function MarketPage() {
   const cheaper = rows.filter((r) => r.cmp.changePct < -0.5).sort((a, b) => a.cmp.changePct - b.cmp.changePct);
   const pricier = rows.filter((r) => r.cmp.changePct > 0.5).sort((a, b) => b.cmp.changePct - a.cmp.changePct);
   const lastUpdated = current.map((c) => c.recordedAt).sort().at(-1);
+  const hasDemo = current.some((c) => !c.verified);
+  const hasReal = current.some((c) => c.verified);
+  const canRecord = f.can("edit_shopping");
+  const recordButton = canRecord ? <Button onClick={() => setRecording({})}><Plus /> Record a price</Button> : null;
   const recommended = s.bulkBuys.filter((b): b is Extract<BulkBuyResult, { recommended: true }> => b.recommended);
   const droppedNotRecommended = s.bulkBuys.filter((b): b is Extract<BulkBuyResult, { recommended: false }> => !b.recommended && b.dropPct >= 8);
 
@@ -51,11 +58,26 @@ export default function MarketPage() {
       <PageHeader
         title="Market Intelligence"
         description="Prices of household essentials across Rwandan markets, compared with your plans."
-        actions={<DemoDataBadge label={provider.label} />}
+        actions={<>{hasDemo && <DemoDataBadge />}{recordButton}</>}
       />
-      <p className="-mt-3 text-xs text-muted">
-        Source: {current[0]?.source ?? "—"} · Last recorded {lastUpdated ? fmtDate(lastUpdated, s.tz, "d MMM yyyy, HH:mm") : "—"}. The provider can be swapped for market surveys, retailer feeds or verified vendor prices.
-      </p>
+      {current.length > 0 && (
+        <p className="-mt-3 text-xs text-muted">
+          {hasReal ? "Prices marked “Recorded” were entered by your household and are used first in every comparison. " : ""}
+          {hasDemo ? "Other prices come from a simulated index for development. " : ""}
+          Last recorded {lastUpdated ? fmtDate(lastUpdated, s.tz, "d MMM yyyy, HH:mm") : "—"}.
+        </p>
+      )}
+
+      {current.length === 0 && (
+        <EmptyState
+          icon={Store}
+          title="No prices recorded yet"
+          description="Record what things cost at your market — when you shop or mark an item as bought. Trust Manager then compares your shopping plans with real prices, shows what is getting cheaper or more expensive, and suggests bulk buys."
+          action={recordButton ?? undefined}
+        />
+      )}
+
+      {current.length > 0 && (<>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Movers title="Becoming cheaper" icon={ArrowDownRight} tone="green" rows={cheaper} fmt={s.fmt} onOpen={setOpen} />
@@ -130,7 +152,7 @@ export default function MarketPage() {
               <tbody>
                 {rows.map(({ product: p, cmp: c }) => (
                   <tr key={p.id} className="cursor-pointer border-b border-line/60 hover:bg-slate-50" onClick={() => setOpen(p)}>
-                    <td className="py-2.5"><p className="font-medium">{p.name}</p><p className="text-xs text-muted">{p.category} · per {p.unit}</p></td>
+                    <td className="py-2.5"><p className="flex items-center gap-1.5 font-medium">{p.name}{c.verified && <Badge tone="green"><BadgeCheck className="size-3" /> Recorded</Badge>}</p><p className="text-xs text-muted">{p.category} · per {p.unit}</p></td>
                     <td className="money py-2.5 text-right font-semibold">{s.fmt(c.average)}</td>
                     <td className="py-2.5 text-right"><p className="money">{s.fmt(c.lowest.price)}</p><p className="text-[11px] text-muted">{c.lowest.marketName}</p></td>
                     <td className="py-2.5 text-right"><p className="money">{s.fmt(c.highest.price)}</p><p className="text-[11px] text-muted">{c.highest.marketName}</p></td>
@@ -155,8 +177,16 @@ export default function MarketPage() {
         </CardContent>
       </Card>
 
+      </>)}
+
+      <Dialog open={!!recording} onOpenChange={(o) => !o && setRecording(null)}>
+        <DialogContent title="Record a price" description="A real price you saw or paid. It is saved with the date, the place and your name.">
+          {recording && <RecordPriceForm products={f.data.marketProducts} history={f.data.marketHistory} tz={s.tz} currency={s.currency} recorderName={f.profile?.fullName ?? "household member"} defaultProductId={recording.productId} onDone={() => setRecording(null)} />}
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!open} onOpenChange={(o) => !o && setOpen(null)}>
-        <DialogContent title={open?.name ?? ""} description="Weekly average across markets (demo data)." wide>
+        <DialogContent title={open?.name ?? ""} description="Average price over time." wide>
           {open && (
             <div className="space-y-4">
               <PriceHistoryChart data={priceSeries(open.id, f.data.marketHistory)} currency={s.currency} />
@@ -165,13 +195,34 @@ export default function MarketPage() {
                 <ul className="divide-y divide-line text-sm">
                   {current.filter((c) => c.productId === open.id).sort((a, b) => a.currentPrice - b.currentPrice).map((c) => (
                     <li key={c.marketName} className="flex items-center justify-between py-2">
-                      <span><span className="block font-medium">{c.marketName}</span><span className="text-xs text-muted">{c.location} · {fmtDate(c.recordedAt, s.tz, "d MMM yyyy")} · {c.source}</span></span>
+                      <span><span className="flex items-center gap-1.5 font-medium">{c.marketName}{c.verified && <Badge tone="green"><BadgeCheck className="size-3" /> Recorded</Badge>}</span><span className="text-xs text-muted">{c.location ? `${c.location} · ` : ""}{fmtDate(c.recordedAt, s.tz, "d MMM yyyy")} · {c.source}</span></span>
                       <span className="text-right"><span className="money block font-semibold">{s.fmt(c.currentPrice)}</span><Change pct={((c.currentPrice - c.previousPrice) / c.previousPrice) * 100} /></span>
                     </li>
                   ))}
                 </ul>
               </div>
-              <DemoDataBadge />
+              {(() => {
+                const mine = f.data.marketHistory.filter((h) => h.productId === open.id && h.householdId).sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+                return mine.length ? (
+                  <div>
+                    <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">Your recorded prices</p>
+                    <ul className="max-h-48 divide-y divide-line overflow-y-auto text-sm">
+                      {mine.map((h) => (
+                        <li key={h.id} className="flex items-center justify-between gap-2 py-1.5">
+                          <span className="text-xs text-muted">{fmtDate(h.recordedAt, s.tz, "d MMM yyyy")} · {h.marketName}{h.note ? ` · ${h.note}` : ""}</span>
+                          <span className="flex items-center gap-1"><span className="money font-medium">{s.fmt(h.price)}</span>
+                            {canRecord && <Button size="icon-sm" variant="ghost" aria-label="Delete this price" onClick={() => void run((api) => api.remove("marketPriceHistory", h.id), "Price removed.")}><Trash2 /></Button>}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null;
+              })()}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                {current.some((c) => c.productId === open.id && !c.verified) ? <DemoDataBadge /> : <span />}
+                {canRecord && <Button size="sm" variant="soft" onClick={() => { setRecording({ productId: open.id }); setOpen(null); }}><Plus /> Record a price for this</Button>}
+              </div>
             </div>
           )}
         </DialogContent>
@@ -203,7 +254,7 @@ function Kv({ k, v, green }: { k: string; v: string; green?: boolean }) {
 function Movers({ title, icon: Icon, tone, rows, fmt, onOpen }: { title: string; icon: React.ElementType; tone: "green" | "red"; rows: { product: MarketProduct; cmp: MarketComparison }[]; fmt: (n: number) => string; onOpen: (p: MarketProduct) => void }) {
   return (
     <Card>
-      <CardHeader><CardTitle className="flex items-center gap-2"><Icon className={cn("size-4", tone === "green" ? "text-brand" : "text-danger")} /> {title}</CardTitle><CardDescription>Since the previous weekly record.</CardDescription></CardHeader>
+      <CardHeader><CardTitle className="flex items-center gap-2"><Icon className={cn("size-4", tone === "green" ? "text-brand" : "text-danger")} /> {title}</CardTitle><CardDescription>Compared with the previous recorded price.</CardDescription></CardHeader>
       <CardContent>
         {rows.length === 0 ? <p className="text-sm text-muted">None this week.</p> : (
           <ul className="space-y-2">

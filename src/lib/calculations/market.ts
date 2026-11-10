@@ -7,7 +7,9 @@ export function latestPrices(products: MarketProduct[], history: MarketPricePoin
   const productById = new Map(products.map((p) => [p.id, p]));
   const groups = new Map<string, MarketPricePoint[]>();
   for (const pt of history) {
-    const k = `${pt.productId}|${pt.marketName}`;
+    if (pt.deletedAt) continue;
+    // Household-recorded and shared prices for the same market are kept apart.
+    const k = `${pt.productId}|${pt.marketName.trim().toLowerCase()}|${pt.householdId ? "h" : "s"}`;
     const arr = groups.get(k) ?? [];
     arr.push(pt);
     groups.set(k, arr);
@@ -32,6 +34,7 @@ export function latestPrices(products: MarketProduct[], history: MarketPricePoin
       currency: last.currency ?? currency,
       recordedAt: last.recordedAt,
       source: last.source,
+      verified: !!last.householdId,
     });
   }
   return out.sort((a, b) => a.productName.localeCompare(b.productName) || a.marketName.localeCompare(b.marketName));
@@ -48,15 +51,18 @@ export function compareProduct(
   history: MarketPricePoint[],
   now: Date = new Date(),
 ): MarketComparison | null {
-  const rows = current.filter((p) => p.productId === product.id);
-  if (!rows.length) return null;
+  const all = current.filter((p) => p.productId === product.id);
+  if (!all.length) return null;
+  // Prices the household recorded itself always win over the simulated index.
+  const verified = all.some((p) => p.verified);
+  const rows = verified ? all.filter((p) => p.verified) : all;
   const average = Math.round(rows.reduce((s, r) => s + r.currentPrice, 0) / rows.length);
   const prevAverage = Math.round(rows.reduce((s, r) => s + r.previousPrice, 0) / rows.length);
   const sorted = [...rows].sort((a, b) => a.currentPrice - b.currentPrice);
   const lo = sorted[0]!;
   const hi = sorted[sorted.length - 1]!;
   const cutoff = now.getTime() - 30 * DAY;
-  const window = history.filter((h) => h.productId === product.id && new Date(h.recordedAt).getTime() >= cutoff);
+  const window = history.filter((h) => h.productId === product.id && !h.deletedAt && !!h.householdId === verified && new Date(h.recordedAt).getTime() >= cutoff);
   const thirtyDayAverage = window.length
     ? Math.round(window.reduce((s, h) => s + h.price, 0) / window.length)
     : average;
@@ -72,14 +78,17 @@ export function compareProduct(
     changePct: changePct(average, prevAverage),
     source: rows[0]!.source,
     recordedAt: latest,
+    verified,
+    priceCount: window.length,
   };
 }
 
 /** Daily average price series for a product (across markets). */
 export function priceSeries(productId: string, history: MarketPricePoint[]) {
   const byDay = new Map<string, number[]>();
+  const mine = history.some((h) => h.productId === productId && h.householdId && !h.deletedAt);
   for (const h of history) {
-    if (h.productId !== productId) continue;
+    if (h.productId !== productId || h.deletedAt || !!h.householdId !== mine) continue;
     const d = h.recordedAt.slice(0, 10);
     const arr = byDay.get(d) ?? [];
     arr.push(h.price);

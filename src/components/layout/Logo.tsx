@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export function LogoMark({ className, tile = false }: { className?: string; tile?: boolean }) {
   return (
     <span className={cn("relative inline-flex shrink-0 items-center justify-center", tile && "rounded-xl bg-white p-1 shadow-sm", className ?? "size-9")}>
-      <Image src="/brand/logo-mark.png" alt="" width={512} height={512} className="h-full w-full object-contain" priority />
+      <Image src="/brand/logo-mark.png" alt="" width={64} height={64} sizes="64px" className="h-full w-full object-contain" priority />
     </span>
   );
 }
@@ -24,5 +24,5 @@ export function Logo({ dark = false, className }: { dark?: boolean; className?: 
 
 /** Full stacked logo, exactly as supplied. */
 export function LogoFull({ className }: { className?: string }) {
-  return <Image src="/brand/logo-full.png" alt="Trust Manager" width={900} height={678} className={cn("h-auto w-56", className)} priority />;
+  return <Image src="/brand/logo-full.png" alt="Trust Manager" width={224} height={168} sizes="224px" className={cn("h-auto w-56", className)} priority />;
 }

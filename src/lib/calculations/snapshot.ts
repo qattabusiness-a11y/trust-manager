@@ -1,6 +1,6 @@
 import { addDays, format, parseISO, subMonths } from "date-fns";
 import { DEFAULT_THRESHOLDS, EMERGENCY_RESERVE_DAYS } from "@/constants";
-import { fmtLocalDate, inPeriod, localDate, monthPeriod, todayLocal, weekPeriod } from "@/lib/dates";
+import { dayPeriod, fmtLocalDate, inPeriod, localDate, monthPeriod, weekKeyOf, todayLocal, weekPeriod } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import type {
   Behavior,
@@ -22,7 +22,7 @@ import type {
 import { availableBalance, isSpending, savingsBalance } from "./balance";
 import { computeBudgetState, type BudgetState, type SpendingStatus } from "./budget";
 import { evaluateBulkBuy, PER_PERSON_MONTHLY, type BulkBuyResult } from "./bulkbuy";
-import { classifyTransaction, type Classification } from "./classification";
+import { classifyAll, type Classification } from "./classification";
 import { auditSubscriptions, dueReminders, incomeSummary, type DueReminder, type SubscriptionAudit } from "./insights";
 import { compareProduct, latestPrices } from "./market";
 import { predictZeroBalance, type ZeroBalanceResult } from "./prediction";
@@ -114,18 +114,10 @@ export function buildSnapshot(d: FinanceData, now: Date = new Date()): FinanceSn
 
   /* ------------------------------------------------ Classifications */
   const itemById = new Map(d.shoppingItems.map((i) => [i.id, i]));
-  const classifications = new Map<string, Classification>();
+  const classifications = classifyAll(txs, { budget: d.budget, tz, shoppingItems: itemById });
   const behaviorCounts: Record<Behavior, number> = { green: 0, yellow: 0, red: 0 };
   for (const tx of txs) {
-    const c = classifyTransaction(tx, {
-      category: catById.get(tx.categoryId),
-      budget: d.budget,
-      tz,
-      history: txs,
-      shoppingItem: tx.shoppingItemId ? itemById.get(tx.shoppingItemId) : null,
-    });
-    classifications.set(tx.id, c);
-    if (isSpending(tx) && inPeriod(tx.occurredAt, m)) behaviorCounts[c.behavior]++;
+    if (isSpending(tx) && inPeriod(tx.occurredAt, m)) behaviorCounts[classifications.get(tx.id)!.behavior]++;
   }
 
   /* --------------------------------------------------- Breakdown */
@@ -144,16 +136,19 @@ export function buildSnapshot(d: FinanceData, now: Date = new Date()): FinanceSn
   });
 
   /* ------------------------------------------- Income vs expenses (6 months) */
+  const monthTotals = new Map<string, { income: number; expenses: number }>();
+  for (const tx of txs) {
+    if (tx.type !== "income" && tx.type !== "expense") continue;
+    const key = localDate(tx.occurredAt, tz).slice(0, 7);
+    const row = monthTotals.get(key) ?? { income: 0, expenses: 0 };
+    if (tx.type === "income") row.income += tx.amount;
+    else row.expenses += tx.amount;
+    monthTotals.set(key, row);
+  }
   const incomeVsExpenses = Array.from({ length: 6 }, (_, i) => {
     const month = format(subMonths(parseISO(today), 5 - i), "yyyy-MM");
-    let income = 0;
-    let expenses = 0;
-    for (const tx of txs) {
-      if (localDate(tx.occurredAt, tz).slice(0, 7) !== month) continue;
-      if (tx.type === "income") income += tx.amount;
-      if (tx.type === "expense") expenses += tx.amount;
-    }
-    return { month, label: fmtLocalDate(`${month}-01`, "MMM"), income, expenses };
+    const row = monthTotals.get(month) ?? { income: 0, expenses: 0 };
+    return { month, label: fmtLocalDate(`${month}-01`, "MMM"), income: row.income, expenses: row.expenses };
   }).filter((r, i, arr) => r.income || r.expenses || i === arr.length - 1);
 
   /* --------------------------------------------- Savings growth (8 weeks) */
@@ -164,12 +159,16 @@ export function buildSnapshot(d: FinanceData, now: Date = new Date()): FinanceSn
   });
 
   /* ------------------------------------------ Weekly utilization (6 weeks) */
+  const weekTotals = new Map<string, number>();
+  for (const [day, amount] of dailyMap) {
+    const wk = weekKeyOf(day);
+    weekTotals.set(wk, (weekTotals.get(wk) ?? 0) + amount);
+  }
+  const thisWeekKey = weekKeyOf(today);
   const weeklyUtilization = Array.from({ length: 6 }, (_, i) => {
-    const at = addDays(now, (i - 5) * 7);
-    const p = weekPeriod(tz, at);
-    const spent = txs.filter((t) => isSpending(t) && inPeriod(t.occurredAt, p)).reduce((s, t) => s + t.amount, 0);
+    const start = format(addDays(parseISO(thisWeekKey), (i - 5) * 7), "yyyy-MM-dd");
+    const spent = weekTotals.get(start) ?? 0;
     const limit = budget?.limits.weekly ?? 0;
-    const start = localDate(p.start, tz);
     return { week: start, label: fmtLocalDate(start, "d MMM"), spent, limit, pct: limit ? Math.round((spent / limit) * 100) : 0 };
   });
 
@@ -208,7 +207,7 @@ export function buildSnapshot(d: FinanceData, now: Date = new Date()): FinanceSn
   if (budget && (budget.week.over > 0 || budget.day.over > 0)) {
     const isWeek = budget.week.over > 0;
     const usage = isWeek ? budget.week : budget.day;
-    const p = isWeek ? weekPeriod(tz, now) : monthPeriod(tz, now);
+    const p = isWeek ? weekPeriod(tz, now) : dayPeriod(tz, now);
     const breakdownMap = new Map<string, number>();
     for (const t of txs) if (isSpending(t) && inPeriod(t.occurredAt, p)) {
       const name = catById.get(t.categoryId)?.name ?? "Other";
@@ -294,7 +293,7 @@ export function buildSnapshot(d: FinanceData, now: Date = new Date()): FinanceSn
       id: `bulk-${bestDeal.productId}`,
       severity: "info",
       title: `${bestDeal.productName} prices have decreased by ${Math.round(bestDeal.dropPct)}%. Consider checking your bulk-buy opportunities.`,
-      explanation: `Compared with the recorded 30-day average in the demo market index.`,
+      explanation: `Compared with the recorded 30-day average${bestDeal.verified ? " of prices your household recorded" : " in the simulated development index"}.`,
       action: { label: "View bulk-buy suggestion", href: "/market#bulk" },
     });
   }

@@ -31,6 +31,14 @@ function diff(before: Record<string, unknown>, after: Record<string, unknown>) {
  * development mode enforces the same household boundaries and role rules
  * as the production database. UI hiding is never the only protection.
  */
+/** Collections written since the last flush — lets the UI refetch only what changed. */
+const touched = new Set<CollectionKey>();
+export function takeTouchedCollections(): CollectionKey[] {
+  const keys = [...touched];
+  touched.clear();
+  return keys;
+}
+
 export function createApi(store: DataStore, actor: Actor) {
   const member = actor.member;
   const householdId = actor.householdId;
@@ -42,6 +50,7 @@ export function createApi(store: DataStore, actor: Actor) {
 
   async function audit(entry: Omit<AuditLog, "id" | "createdAt" | "updatedAt" | "actorId" | "householdId"> & { householdId?: string | null }) {
     const now = new Date().toISOString();
+    touched.add("auditLogs");
     await store.insert("auditLogs", {
       id: uuid(),
       createdAt: now,
@@ -65,6 +74,11 @@ export function createApi(store: DataStore, actor: Actor) {
       const perm = policy[op];
       if (perm) assertCan(member, perm);
     }
+    if (policy.scope === "shared") {
+      requireHousehold();
+      const perm = policy[op];
+      if (perm) assertCan(member, perm);
+    }
     if (policy.scope === "public" && op !== "create") {
       // Reference data (categories, market index) is read-only from the app.
       throw new PermissionError("manage_settings");
@@ -82,6 +96,12 @@ export function createApi(store: DataStore, actor: Actor) {
       switch (policy.scope) {
         case "public":
           rows = await store.select(k);
+          break;
+        case "shared":
+          rows = (await store.select(k)).filter((r) => {
+            const h = (r as unknown as { householdId?: string | null }).householdId;
+            return !h || h === householdId;
+          });
           break;
         case "user":
           rows = await store.select(k, { userId: actor.userId } as unknown as Partial<Row<K>>);
@@ -112,6 +132,9 @@ export function createApi(store: DataStore, actor: Actor) {
           } else rows = [];
           break;
       }
+      // Stable order (oldest first) so lists don't reshuffle between loads.
+      const created = (r: Row<K>) => (r as { createdAt?: string }).createdAt ?? "";
+      rows.sort((x, y) => (created(x) < created(y) ? -1 : created(x) > created(y) ? 1 : x.id < y.id ? -1 : 1));
       return opts.includeDeleted ? rows : rows.filter((r) => !(r as { deletedAt?: string | null }).deletedAt);
     },
 
@@ -120,8 +143,9 @@ export function createApi(store: DataStore, actor: Actor) {
       const now = new Date().toISOString();
       const row = { id: uuid(), createdAt: now, updatedAt: now, deletedAt: null, ...data } as unknown as Row<K>;
       const scoped = row as unknown as { householdId?: string; userId?: string };
-      if (POLICIES[k].scope === "household" && scoped.householdId !== householdId) throw new PermissionError("member");
+      if ((POLICIES[k].scope === "household" || POLICIES[k].scope === "shared") && scoped.householdId !== householdId) throw new PermissionError("member");
       if (POLICIES[k].scope === "user" && scoped.userId !== actor.userId) throw new PermissionError("own_record");
+      touched.add(k);
       const saved = await store.insert(k, row);
       if (POLICIES[k].audited) await audit({ action: "create", entity: k, entityId: row.id, changes: null });
       return saved;
@@ -131,7 +155,7 @@ export function createApi(store: DataStore, actor: Actor) {
       const before = await store.getById(k, id);
       if (!before) throw new Error("Record not found.");
       const scoped = before as unknown as { householdId?: string; userId?: string };
-      if (POLICIES[k].scope === "household" && scoped.householdId !== householdId) throw new PermissionError("member");
+      if ((POLICIES[k].scope === "household" || POLICIES[k].scope === "shared") && scoped.householdId !== householdId) throw new PermissionError("member");
       if (POLICIES[k].scope === "user" && scoped.userId !== actor.userId) throw new PermissionError("own_record");
       if (k === "profiles" && before.id !== actor.userId) throw new PermissionError("own_record");
       if (k === "households") {
@@ -144,6 +168,7 @@ export function createApi(store: DataStore, actor: Actor) {
       }
       const { id: _i, householdId: _h, createdAt: _c, ...safe } = patch as Record<string, unknown>;
       void _i; void _h; void _c;
+      touched.add(k);
       const next = await store.update(k, id, { ...safe, updatedAt: new Date().toISOString() } as unknown as Partial<Row<K>>);
       if (POLICIES[k].audited) {
         const changes = diff(before as unknown as Record<string, unknown>, safe);
@@ -156,8 +181,9 @@ export function createApi(store: DataStore, actor: Actor) {
       const before = await store.getById(k, id);
       if (!before) return;
       const scoped = before as unknown as { householdId?: string };
-      if (POLICIES[k].scope === "household" && scoped.householdId !== householdId) throw new PermissionError("member");
+      if ((POLICIES[k].scope === "household" || POLICIES[k].scope === "shared") && scoped.householdId !== householdId) throw new PermissionError("member");
       checkWrite(k, "remove");
+      touched.add(k);
       if (POLICIES[k].soft) {
         await store.update(k, id, { deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } as unknown as Partial<Row<K>>);
       } else {
@@ -168,6 +194,7 @@ export function createApi(store: DataStore, actor: Actor) {
 
     async restore<K extends CollectionKey>(k: K, id: string): Promise<void> {
       checkWrite(k, "update");
+      touched.add(k);
       await store.update(k, id, { deletedAt: null, updatedAt: new Date().toISOString() } as unknown as Partial<Row<K>>);
       if (POLICIES[k].audited) await audit({ action: "restore", entity: k, entityId: id, changes: null });
     },

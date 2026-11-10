@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import type { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/inputs";
+import { setPendingInvite } from "@/lib/pending-invite";
 import { registerSchema } from "@/lib/validations";
 import { register as registerUser } from "@/services/auth.service";
 import { useAuthStore } from "@/stores/auth.store";
@@ -27,13 +28,16 @@ export function RegisterForm() {
   async function submit(values: z.infer<typeof registerSchema>) {
     setBusy(true);
     try {
+      setPendingInvite(params.get("invite"));
       const r = await registerUser(values.fullName, values.email, values.password);
       setSession(r.userId, null);
       await qc.invalidateQueries({ queryKey: ["session"] });
       const invite = params.get("invite");
       router.replace(invite ? `/invite/${encodeURIComponent(invite)}` : "/onboarding");
     } catch (err) {
-      toast.error((err as Error).message);
+      const message = (err as Error).message;
+      if (/check your email/i.test(message)) toast.info("Almost done — we sent a confirmation link to your email. Open it, then sign in.", { duration: 20_000 });
+      else toast.error(message);
     } finally {
       setBusy(false);
     }

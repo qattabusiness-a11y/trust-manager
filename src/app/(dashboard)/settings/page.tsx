@@ -13,10 +13,13 @@ import { Badge } from "@/components/ui/misc";
 import { FINANCIAL_GOAL_OPTIONS } from "@/constants";
 import { isSupabaseConfigured } from "@/config/env";
 import { useAction, useList } from "@/hooks/use-data";
+import { useFinance } from "@/hooks/use-finance";
 import { useSession } from "@/hooks/use-session";
 import { resetDemoData } from "@/lib/data/runtime";
 import { cn } from "@/lib/utils";
 import { deleteMyAccount, exportMyData } from "@/services/account.service";
+import { changePassword } from "@/services/auth.service";
+import { registerSchema } from "@/lib/validations";
 import { useAuthStore } from "@/stores/auth.store";
 import type { UserPersona } from "@/types";
 
@@ -59,10 +62,17 @@ export default function SettingsPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
-          <CardHeader><CardTitle>Notifications</CardTitle><CardDescription>In-app notifications are always on.</CardDescription></CardHeader>
+          <CardHeader><CardTitle>Notifications</CardTitle><CardDescription>Reminders inside the app are always on.</CardDescription></CardHeader>
           <CardContent className="space-y-4">
-            <Switch checked={!!prefs?.emailNotifications} disabled={!prefs} onChange={(v) => void run((api) => api.update("preferences", prefs!.id, { emailNotifications: v }), "Saved.")} label="Email reminders" description={dev ? "Simulated in development mode — no email is actually sent." : "Sent through the configured email provider."} />
-            <Switch checked={!!prefs?.pushNotifications} disabled={!prefs} onChange={(v) => void run((api) => api.update("preferences", prefs!.id, { pushNotifications: v }), "Saved.")} label="Push notifications" description={dev ? "Simulated in development mode — no push is actually sent." : "Requires installing the app on your phone."} />
+            <p className="text-sm text-navy">Bill reminders, budget warnings and low-balance alerts appear in the bell at the top of every page.</p>
+            {dev ? (
+              <>
+                <Switch checked={!!prefs?.emailNotifications} disabled={!prefs} onChange={(v) => void run((api) => api.update("preferences", prefs!.id, { emailNotifications: v }), "Saved.")} label="Email reminders (simulated)" description="Development mode only — recorded but never actually sent." />
+                <Switch checked={!!prefs?.pushNotifications} disabled={!prefs} onChange={(v) => void run((api) => api.update("preferences", prefs!.id, { pushNotifications: v }), "Saved.")} label="Push notifications (simulated)" description="Development mode only — recorded but never actually sent." />
+              </>
+            ) : (
+              <p className="rounded-lg bg-slate-50 p-3 text-xs text-muted">Email and phone push reminders are not available yet. Open Trust Manager regularly, or add it to your phone&apos;s home screen, to see your reminders.</p>
+            )}
             <Field label="Default reminder days for new bills"><Input value={(prefs?.defaultReminderDays ?? []).join(", ")} readOnly /></Field>
           </CardContent>
         </Card>
@@ -75,9 +85,12 @@ export default function SettingsPage() {
             <p><span className="text-muted">Country:</span> {household?.country}</p>
             <p><span className="text-muted">Time zone:</span> {household?.timezone} — days, weeks (Mon–Sun) and months are calculated in this time zone.</p>
             <p><span className="text-muted">Your role:</span> <Badge tone="gray" className="capitalize">{s.member?.role}</Badge></p>
+            {household && s.can("view_balances") && s.can("manage_settings") && <BalanceCorrection householdId={household.id} openingBalance={household.openingBalance} />}
           </CardContent>
         </Card>
       </div>
+
+      <PasswordCard userId={s.userId} />
 
       <Card>
         <CardHeader><CardTitle className="flex items-center gap-2"><Database className="size-4" /> Your data</CardTitle><CardDescription>Receipt images are never stored, so they are never part of an export.</CardDescription></CardHeader>
@@ -152,5 +165,70 @@ function ProfileCard({ persona, fullName, userId }: { persona: UserPersona; full
           )}
         </CardContent>
       </Card>
+  );
+}
+
+function PasswordCard({ userId }: { userId: string | null }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy, setBusy] = useState(false);
+  const check = registerSchema.shape.password.safeParse(password);
+  const error = password && !check.success ? check.error.issues[0]?.message : confirm && confirm !== password ? "Passwords don't match" : undefined;
+  return (
+    <Card>
+      <CardHeader><CardTitle>Change password</CardTitle></CardHeader>
+      <CardContent>
+        <form
+          className="grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-start"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!check.success || confirm !== password) return;
+            setBusy(true);
+            try {
+              await changePassword(password, userId);
+              setPassword("");
+              setConfirm("");
+              toast.success("Password changed.");
+            } catch (err) {
+              toast.error((err as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <Field label="New password" hint="At least 8 characters with a letter and a number."><Input type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
+          <Field label="Repeat new password" error={error}><Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} /></Field>
+          <Button type="submit" variant="outline" className="sm:mt-[22px]" loading={busy} disabled={!check.success || confirm !== password}>Change password</Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Lets the owner line the recorded balance up with the money they really have. */
+function BalanceCorrection({ householdId, openingBalance }: { householdId: string; openingBalance: number }) {
+  const { snapshot } = useFinance();
+  const { run, pending } = useAction();
+  const [value, setValue] = useState("");
+  const actual = Math.round(Number(value));
+  const valid = value !== "" && Number.isFinite(actual) && actual >= 0;
+  const diff = valid ? actual - snapshot.balance : 0;
+  return (
+    <div className="mt-4 rounded-xl border border-line p-3">
+      <p className="text-sm font-medium text-navy">Correct my balance</p>
+      <p className="text-xs text-muted">Trust Manager shows {snapshot.fmt(snapshot.balance)} available. If your cash, MoMo and bank together hold a different amount, enter the real total and we&apos;ll adjust your starting balance. Your transactions stay as they are.</p>
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        <Field label={`Money I really have now (${snapshot.currency})`}><Input type="number" inputMode="numeric" value={value} onChange={(e) => setValue(e.target.value)} className="w-48" /></Field>
+        <Button
+          variant="outline"
+          disabled={!valid || diff === 0}
+          loading={pending}
+          onClick={() => void run((api) => api.update("households", householdId, { openingBalance: openingBalance + diff }, "Balance corrected by user"), "Balance corrected.").then(() => setValue(""))}
+        >
+          Update balance
+        </Button>
+        {valid && diff !== 0 && <p className="pb-2 text-xs text-muted">Adjustment: {snapshot.fmt(diff, { sign: true })}</p>}
+      </div>
+    </div>
   );
 }

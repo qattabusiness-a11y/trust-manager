@@ -40,6 +40,7 @@ export type BulkBuyResult =
       upcomingObligations: number;
       reserve: number;
       confidence: "high" | "medium" | "low";
+      verified: boolean;
       rationale: string[];
     };
 
@@ -48,6 +49,7 @@ export function evaluateBulkBuy(input: BulkBuyInput): BulkBuyResult {
   const dropPct = c.thirtyDayAverage > 0 ? ((c.thirtyDayAverage - c.average) / c.thirtyDayAverage) * 100 : 0;
   const base = { recommended: false as const, productId: product.id, dropPct };
 
+  if (c.priceCount < 3) return { ...base, reason: "Not enough price history yet — record prices over a few weeks to unlock bulk-buy advice." };
   if (dropPct < MIN_DROP_PCT) return { ...base, reason: "Price is not meaningfully below its 30-day average." };
   if (input.monthlyConsumption <= 0) return { ...base, reason: "Your household does not regularly use this item." };
 
@@ -96,6 +98,7 @@ export function evaluateBulkBuy(input: BulkBuyInput): BulkBuyResult {
     upcomingObligations: input.upcomingObligations,
     reserve: input.reserve,
     confidence,
+    verified: c.verified,
     rationale: [
       `Price is ${dropPct.toFixed(0)}% below the recorded 30-day average.`,
       `Your household uses about ${input.monthlyConsumption} ${product.unit} per month.`,

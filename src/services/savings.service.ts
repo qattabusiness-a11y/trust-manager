@@ -21,15 +21,16 @@ export interface TransferResult {
 
 /**
  * Savings transfer contract. A real implementation would call a MoMo or bank
- * API after explicit user authorization. The mock ONLY records the movement
- * inside Trust Manager and says so.
+ * API after explicit user authorization. This implementation keeps a ledger:
+ * it records the movement inside Trust Manager and tells the user to move
+ * the money themselves. It never claims a real transfer happened.
  */
 export interface SavingsTransferService {
   readonly simulated: boolean;
   transfer(api: Api, req: TransferRequest): Promise<TransferResult>;
 }
 
-export class MockSavingsTransferService implements SavingsTransferService {
+export class LedgerSavingsTransferService implements SavingsTransferService {
   readonly simulated = true;
 
   async transfer(api: Api, req: TransferRequest): Promise<TransferResult> {
@@ -37,15 +38,16 @@ export class MockSavingsTransferService implements SavingsTransferService {
     const householdId = api.actor.householdId!;
     const now = new Date().toISOString();
     const withdraw = req.direction === "withdraw";
+    const [household] = await api.list("households");
     const tx = await api.create("transactions", {
       householdId,
       type: withdraw ? "savings_withdrawal" : "savings_transfer",
       title: withdraw ? `Withdrawal from savings` : req.source === "micro_sweep" ? "Spare-change sweep" : "Transfer to savings",
       amount: req.amount,
-      currency: "RWF",
+      currency: household?.currency ?? "RWF",
       occurredAt: now,
       categoryId: CAT.savings,
-      merchant: "Trust Manager savings (simulated)",
+      merchant: "Savings",
       paymentMethod: "other",
       essential: true,
       planned: true,
@@ -71,10 +73,10 @@ export class MockSavingsTransferService implements SavingsTransferService {
     });
     return {
       simulated: true,
-      reference: `SIM-${tx.id.slice(0, 8).toUpperCase()}`,
-      message: "Simulated transfer recorded in Trust Manager. No MoMo or bank money was moved.",
+      reference: `TM-${tx.id.slice(0, 8).toUpperCase()}`,
+      message: withdraw ? "Withdrawal recorded. Remember to move the money in MoMo or your bank." : "Saved! Recorded in Trust Manager — remember to move the money in MoMo or your bank.",
     };
   }
 }
 
-export const savingsTransferService: SavingsTransferService = new MockSavingsTransferService();
+export const savingsTransferService: SavingsTransferService = new LedgerSavingsTransferService();

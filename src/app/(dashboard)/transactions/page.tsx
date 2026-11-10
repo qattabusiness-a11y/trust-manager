@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, ScanLine, Search } from "lucide-react";
+import { Plus, ScanLine, Search, SlidersHorizontal } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { EmptyState, ErrorState, LoadingState, NoAccess, PageHeader, Stat } from "@/components/shared";
@@ -27,6 +27,7 @@ function TransactionsInner() {
   const setReceipt = useUIStore((s) => s.setReceiptOpen);
   const deletedQ = useList("transactions", { includeDeleted: true });
   const [q, setQ] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
   const [period, setPeriod] = useState<Period>((params.get("period") as Period) ?? "all");
   const [type, setType] = useState("");
   const [category, setCategory] = useState("");
@@ -53,6 +54,7 @@ function TransactionsInner() {
   if (f.error) return <ErrorState error={f.error} />;
   if (!f.can("view_transactions")) return <NoAccess what="household transactions" />;
 
+  const activeFilters = [period !== "all", type, category, behavior, method].filter(Boolean).length;
   const spent = filtered.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0);
   const received = filtered.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0);
   const deleted = (deletedQ.data ?? []).filter((t) => t.deletedAt).sort((a, b) => (b.deletedAt ?? "").localeCompare(a.deletedAt ?? ""));
@@ -96,10 +98,17 @@ function TransactionsInner() {
         <Card>
           <CardContent className="space-y-4 pt-5">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
-              <div className="relative lg:col-span-2">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title, merchant, reference" className="pl-9" aria-label="Search" />
+              <div className="flex gap-2 lg:col-span-2">
+                <div className="relative flex-1">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" />
+                  <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search title, merchant, reference" className="pl-9" aria-label="Search" />
+                </div>
+                {/* On phones the filters fold away so the list is visible straight away. */}
+                <Button type="button" variant="outline" className="sm:hidden" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters} aria-controls="tx-filters">
+                  <SlidersHorizontal /> Filters{activeFilters ? ` (${activeFilters})` : ""}
+                </Button>
               </div>
+              <div id="tx-filters" className={`${showFilters ? "grid" : "hidden"} gap-2 sm:contents`}>
               <Select value={period} onChange={(e) => setPeriod(e.target.value as Period)} aria-label="Period">
                 <option value="all">All time</option><option value="week">This week</option><option value="month">This month</option><option value="30d">Last 30 days</option>
               </Select>
@@ -118,6 +127,7 @@ function TransactionsInner() {
                   <option value="">All methods</option>
                   {Object.entries(PAYMENT_METHOD_LABELS).map(([k, l]) => <option key={k} value={k}>{l.replace(" (MoMo)", "")}</option>)}
                 </Select>
+              </div>
               </div>
             </div>
             <div className="flex flex-wrap gap-6 rounded-xl bg-slate-50 px-4 py-3">

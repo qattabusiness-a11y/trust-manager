@@ -5,6 +5,7 @@ import { useFinance } from "@/hooks/use-finance";
 import { useList } from "@/hooks/use-data";
 import { useQueryClient } from "@tanstack/react-query";
 import { notificationService, type Channel } from "@/services/notification.service";
+import { isSupabaseConfigured } from "@/config/env";
 import { todayLocal } from "@/lib/dates";
 import { sweepSuggestions } from "@/lib/calculations/insights";
 import { savingsTransferService } from "@/services/savings.service";
@@ -27,26 +28,35 @@ export function NotificationSync() {
     if (ran.current === key) return;
     ran.current = key;
     const p = prefs.data?.[0];
-    const channels: Channel[] = ["in_app", ...(p?.emailNotifications ? (["email"] as Channel[]) : []), ...(p?.pushNotifications ? (["push"] as Channel[]) : [])];
+    // Email and push have no delivery provider yet. A live deployment therefore records
+    // in-app notifications only; development mode also records clearly-labeled simulated ones.
+    const channels: Channel[] = isSupabaseConfigured()
+      ? ["in_app"]
+      : ["in_app", ...(p?.emailNotifications ? (["email"] as Channel[]) : []), ...(p?.pushNotifications ? (["push"] as Channel[]) : [])];
     const s = f.snapshot;
     const api = f.api;
 
     void (async () => {
       let created = 0;
-      const send = async (n: Parameters<typeof notificationService.send>[1]) => {
-        const r = await notificationService.send(api, n, channels);
-        created += r.filter((x) => x.status !== "skipped_duplicate").length;
-      };
+      // Collect everything first, then send in one batch (one duplicate check, parallel writes).
+      const batch: Parameters<typeof notificationService.sendMany>[1] = [];
       if (f.can("view_budget")) {
         for (const r of s.reminders) {
-          await send({ userId: null, title: r.daysUntil < 0 ? "Bill overdue" : "Upcoming payment", body: r.message, severity: r.severity, actionHref: "/bills", dedupeKey: r.dedupeKey });
+          batch.push({ userId: null, title: r.daysUntil < 0 ? "Bill overdue" : "Upcoming payment", body: r.message, severity: r.severity, actionHref: "/bills", dedupeKey: r.dedupeKey });
         }
       }
       if (s.hardStop && f.can("view_budget")) {
-        await send({ userId: f.userId, title: "STOP SPENDING", body: `You have exceeded your ${s.hardStop.period} spending limit by ${s.fmt(s.hardStop.over)}.`, severity: "critical", actionHref: "/budget", dedupeKey: `hardstop:${s.hardStop.period}:${day}` });
+        batch.push({ userId: f.userId, title: "STOP SPENDING", body: `You have exceeded your ${s.hardStop.period} spending limit by ${s.fmt(s.hardStop.over)}.`, severity: "critical", actionHref: "/budget", dedupeKey: `hardstop:${s.hardStop.period}:${day}` });
       }
       if (s.prediction.status === "ok" && s.prediction.projectedZeroDate && (s.prediction.projectedDaysRemaining ?? 99) <= 21 && f.can("view_balances")) {
-        await send({ userId: f.userId, title: "Funds may run low", body: `If spending continues at this pace, available funds may reach zero around ${s.prediction.projectedZeroDate} (estimate).`, severity: "warning", actionHref: "/analytics#forecast", dedupeKey: `zero:${s.prediction.projectedZeroDate}` });
+        batch.push({ userId: f.userId, title: "Funds may run low", body: `If spending continues at this pace, available funds may reach zero around ${s.prediction.projectedZeroDate} (estimate).`, severity: "warning", actionHref: "/analytics#forecast", dedupeKey: `zero:${s.prediction.projectedZeroDate}` });
+      }
+      try {
+        const r = await notificationService.sendMany(api, batch, channels);
+        // "failed" usually means another household member created the same reminder a moment ago.
+        created += r.filter((x) => x.status === "delivered" || x.status === "simulated").length;
+      } catch {
+        /* best effort */
       }
       // Automatic round-up rule (opt-in, simulated): only expenses recorded after it was enabled.
       if (p?.autoSweep && p.autoSweepSince && f.can("manage_savings")) {

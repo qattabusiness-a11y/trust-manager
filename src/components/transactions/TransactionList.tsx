@@ -15,6 +15,7 @@ import { fmtDate } from "@/lib/dates";
 import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import type { Behavior, Transaction, TransactionCategory } from "@/types";
+import { removeTransaction, restoreTransaction } from "@/services/transaction.service";
 import { TransactionForm } from "./TransactionForm";
 
 const SOURCE_LABEL: Record<Transaction["source"], string> = {
@@ -75,14 +76,14 @@ export function TransactionList({
                     <Badge tone="gray">{PAYMENT_METHOD_LABELS[tx.paymentMethod].replace(" (MoMo)", "")}</Badge>
                   </span>
                 </span>
-                <span className={cn("money w-32 shrink-0 text-right text-sm font-semibold", income ? "text-brand-dark" : tx.type === "savings_transfer" ? "text-navy-soft" : "text-navy")}>
+                <span className={cn("money w-24 shrink-0 text-right text-sm font-semibold sm:w-32", income ? "text-brand-dark" : tx.type === "savings_transfer" ? "text-navy-soft" : "text-navy")}>
                   {income ? "+" : "−"}
                   {formatMoney(tx.amount, currency).replace("−", "")}
                 </span>
               </button>
               {deleted ? (
                 canEdit && (
-                  <Button variant="ghost" size="sm" onClick={() => void run((api) => api.restore("transactions", tx.id), "Transaction restored.")}>
+                  <Button variant="ghost" size="sm" onClick={() => void run((api) => restoreTransaction(api, tx), "Transaction restored.")}>
                     <RotateCcw /> Restore
                   </Button>
                 )
@@ -96,7 +97,7 @@ export function TransactionList({
                   <DropdownMenu.Portal>
                     <DropdownMenu.Content align="end" className="z-50 min-w-52 rounded-xl border border-line bg-white p-1 shadow-xl">
                       <Item onSelect={() => setDetails(tx)} icon={History}>Details & history</Item>
-                      {canEdit && <Item onSelect={() => setEditing(tx)} icon={Pencil}>Edit / correct</Item>}
+                      {canEdit && (tx.type === "expense" || tx.type === "income") && <Item onSelect={() => setEditing(tx)} icon={Pencil}>Edit / correct</Item>}
                       {canEdit && tx.type === "expense" && (
                         <>
                           <DropdownMenu.Separator className="my-1 h-px bg-line" />
@@ -138,12 +139,12 @@ export function TransactionList({
         open={!!removing}
         onOpenChange={(o) => !o && setRemoving(null)}
         title="Delete this transaction?"
-        description="It will be removed from your totals. You can restore it from “Recently deleted”, and the deletion is recorded in the audit log."
+        description={removing && removing.type !== "expense" && removing.type !== "income" ? "This savings movement will be undone: the money returns to where it was. You can restore it from “Recently deleted”." : "It will be removed from your totals. You can restore it from “Recently deleted”, and the deletion is recorded in the audit log."}
         confirmLabel="Delete"
         danger
         loading={pending}
         onConfirm={async () => {
-          await run((api) => api.remove("transactions", removing!.id, "Deleted by user"), "Transaction deleted.");
+          await run((api) => removeTransaction(api, removing!), "Transaction deleted.");
           setRemoving(null);
         }}
       />

@@ -72,6 +72,7 @@ export const purchaseSchema = z.object({
   date: dateStr,
   paymentMethod: z.enum(["momo", "bank", "cash", "card", "other"]),
   recordTransaction: z.boolean(),
+  recordPrice: z.boolean(),
 });
 
 export const recurringSchema = z.object({

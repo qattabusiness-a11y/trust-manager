@@ -3,6 +3,7 @@
 import { isSupabaseConfigured } from "@/config/env";
 import { hashPassword, randomToken, sha256, verifyPassword } from "@/lib/crypto";
 import { getStore } from "@/lib/data/runtime";
+import { dayPeriod } from "@/lib/dates";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { uuid } from "@/lib/utils";
 import type { Household, HouseholdInvitation, HouseholdMember, HouseholdRole, Profile } from "@/types";
@@ -127,7 +128,9 @@ export async function createHousehold(
   if (!profile) throw new Error("Profile not found.");
   const now = new Date().toISOString();
   const householdId = uuid();
-  await store.insert("households", { id: householdId, createdAt: now, updatedAt: now, deletedAt: null, ownerId: userId, openingBalanceDate: now, ...input });
+  // Tracking starts at the beginning of today (household time), so everything recorded today counts.
+  const trackingStart = dayPeriod(input.timezone).start.toISOString();
+  await store.insert("households", { id: householdId, createdAt: now, updatedAt: now, deletedAt: null, ownerId: userId, openingBalanceDate: trackingStart, ...input });
   await store.insert("householdMembers", {
     id: uuid(), createdAt: now, updatedAt: now, deletedAt: null, householdId, userId,
     displayName: profile.fullName, email: profile.email, role: "owner", permissionOverrides: {}, status: "active",
@@ -190,4 +193,34 @@ export async function acceptInvitation(token: string, userId: string): Promise<s
   await store.update("profiles", userId, { defaultHouseholdId: inv.householdId, updatedAt: now });
   await store.insert("auditLogs", { id: uuid(), createdAt: now, updatedAt: now, deletedAt: null, householdId: inv.householdId, actorId: userId, action: "invite", entity: "household_invitations", entityId: inv.id, changes: { status: { from: "pending", to: "accepted" } }, note: "Invitation accepted" });
   return inv.householdId;
+}
+
+/* --------------------------------------------------------- Passwords */
+
+/** Sends a password-reset link (Supabase mode). Never reveals whether the email exists. */
+export async function requestPasswordReset(email: string): Promise<void> {
+  if (!isSupabaseConfigured()) throw new Error("Password reset by email needs the live database. In development mode, use Settings → Reset demo data.");
+  const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error && !/rate|limit|seconds/i.test(error.message)) return; // do not leak account existence
+  if (error) throw new Error("Please wait a minute before requesting another link.");
+}
+
+export async function hasRecoverySession(): Promise<boolean> {
+  if (!isSupabaseConfigured()) return false;
+  const { data } = await getSupabaseBrowserClient().auth.getSession();
+  return !!data.session;
+}
+
+export async function changePassword(newPassword: string, userId?: string | null): Promise<void> {
+  if (isSupabaseConfigured()) {
+    const { error } = await getSupabaseBrowserClient().auth.updateUser({ password: newPassword });
+    if (error) throw new Error(error.message);
+    return;
+  }
+  if (!userId) throw new Error("Please sign in first.");
+  const store = await getStore();
+  const { hash, salt } = await hashPassword(newPassword);
+  await store.update("profiles", userId, { passwordHash: hash, passwordSalt: salt, updatedAt: new Date().toISOString() });
 }

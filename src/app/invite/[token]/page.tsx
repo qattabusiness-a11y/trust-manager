@@ -12,6 +12,7 @@ import { Card } from "@/components/ui/card";
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from "@/constants";
 import { useNow } from "@/hooks/use-now";
 import { useSession } from "@/hooks/use-session";
+import { clearPendingInvite } from "@/lib/pending-invite";
 import { acceptInvitation, lookupInvitation } from "@/services/auth.service";
 import { useAuthStore } from "@/stores/auth.store";
 import type { HouseholdRole } from "@/types";
@@ -34,6 +35,7 @@ export default function InvitePage() {
     setBusy(true);
     try {
       const householdId = await acceptInvitation(token, session.userId);
+      clearPendingInvite();
       setHousehold(householdId);
       await qc.invalidateQueries();
       toast.success(`You joined ${inv.data?.householdName}.`);
@@ -53,9 +55,15 @@ export default function InvitePage() {
         {inv.isLoading || session.loading ? (
           <p className="mt-4 text-sm text-muted">Checking your invitation…</p>
         ) : !inv.data ? (
-          <p className="mt-4 text-sm text-navy">This invitation link is not valid. Ask the household owner for a new one.</p>
+          <>
+            <p className="mt-4 text-sm text-navy">This invitation link is not valid. Ask the household owner for a new one.</p>
+            <Button asChild variant="outline" className="mt-6 w-full"><Link href="/" onClick={clearPendingInvite}>Continue to Trust Manager</Link></Button>
+          </>
         ) : !usable ? (
-          <p className="mt-4 text-sm text-navy">This invitation is {expired ? "expired" : inv.data.status}. Ask the household owner for a new one.</p>
+          <>
+            <p className="mt-4 text-sm text-navy">This invitation is {expired ? "expired" : inv.data.status}. Ask the household owner for a new one.</p>
+            <Button asChild variant="outline" className="mt-6 w-full"><Link href="/" onClick={clearPendingInvite}>Continue to Trust Manager</Link></Button>
+          </>
         ) : (
           <>
             <h1 className="mt-4 text-xl font-semibold">Join {inv.data.householdName}</h1>

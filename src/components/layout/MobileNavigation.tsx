@@ -27,7 +27,7 @@ export function MobileNavigation() {
               <li key={n.href}>
                 <Link href={n.href} aria-current={active ? "page" : undefined} className={cn("flex flex-col items-center gap-0.5 py-2 text-[10px]", active ? "text-brand-dark" : "text-muted")}>
                   <n.icon className="size-5" />
-                  {n.label.split(" ")[0]}
+                  {n.short ?? n.label.split(" ")[0]}
                 </Link>
               </li>
             );

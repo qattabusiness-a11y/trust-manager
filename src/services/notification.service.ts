@@ -24,19 +24,40 @@ export interface DeliveryReport {
  */
 export interface NotificationService {
   send(api: Api, n: OutgoingNotification, channels: Channel[]): Promise<DeliveryReport[]>;
+  /** Send several notifications with a single duplicate check. */
+  sendMany(api: Api, items: OutgoingNotification[], channels: Channel[]): Promise<DeliveryReport[]>;
 }
 
 export class MockNotificationService implements NotificationService {
   async send(api: Api, n: OutgoingNotification, channels: Channel[]): Promise<DeliveryReport[]> {
+    return this.sendMany(api, [n], channels);
+  }
+
+  async sendMany(api: Api, items: OutgoingNotification[], channels: Channel[]): Promise<DeliveryReport[]> {
     const householdId = api.actor.householdId;
-    if (!householdId) return [];
-    const existing = n.dedupeKey ? await api.list("notifications", { includeDeleted: true }) : [];
-    const reports: DeliveryReport[] = [];
-    for (const channel of channels) {
-      if (n.dedupeKey && existing.some((e) => e.dedupeKey === n.dedupeKey && e.channel === channel)) {
-        reports.push({ channel, status: "skipped_duplicate" });
-        continue;
+    if (!householdId || !items.length) return [];
+    // One lookup for the whole batch instead of one per notification.
+    const existing = items.some((n) => n.dedupeKey) ? await api.list("notifications", { includeDeleted: true }) : [];
+    const seen = new Set(existing.map((e) => `${e.dedupeKey}|${e.channel}`));
+    const jobs: Promise<DeliveryReport>[] = [];
+    for (const n of items) {
+      for (const channel of channels) {
+        const key = `${n.dedupeKey}|${channel}`;
+        if (n.dedupeKey && seen.has(key)) {
+          jobs.push(Promise.resolve({ channel, status: "skipped_duplicate" }));
+          continue;
+        }
+        if (n.dedupeKey) seen.add(key);
+        jobs.push(this.create(api, householdId, n, channel).then(
+          (status) => ({ channel, status }),
+          () => ({ channel, status: "failed" as const }),
+        ));
       }
+    }
+    return Promise.all(jobs);
+  }
+
+  private async create(api: Api, householdId: string, n: OutgoingNotification, channel: Channel): Promise<"delivered" | "simulated"> {
       const status = channel === "in_app" ? "delivered" : "simulated";
       await api.create("notifications", {
         householdId,
@@ -50,9 +71,7 @@ export class MockNotificationService implements NotificationService {
         dedupeKey: n.dedupeKey ?? null,
         readAt: channel === "in_app" ? null : new Date().toISOString(),
       });
-      reports.push({ channel, status });
-    }
-    return reports;
+      return status;
   }
 }
 

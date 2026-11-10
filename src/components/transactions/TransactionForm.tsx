@@ -9,7 +9,9 @@ import { Field, Input, Select, Switch, Textarea } from "@/components/ui/inputs";
 import { Tabs } from "@/components/ui/misc";
 import { PAYMENT_METHOD_LABELS } from "@/constants";
 import { useAction, useList } from "@/hooks/use-data";
+import { useFinance } from "@/hooks/use-finance";
 import { useSession } from "@/hooks/use-session";
+import { fmtDate } from "@/lib/dates";
 import { localDate, todayLocal } from "@/lib/dates";
 import { transactionInputSchema, type TransactionInput } from "@/lib/validations";
 import { saveTransaction, ValidationError } from "@/services/transaction.service";
@@ -25,6 +27,7 @@ export function TransactionForm({
   onDone,
   source,
   shoppingItemId,
+  lockType,
 }: {
   initial?: Transaction | null;
   defaults?: Partial<TransactionInput>;
@@ -33,10 +36,13 @@ export function TransactionForm({
   onDone: (tx: Transaction) => void;
   source?: Transaction["source"];
   shoppingItemId?: string | null;
+  /** Hide the expense/income switch (e.g. when the type came from a receipt). */
+  lockType?: boolean;
 }) {
   const { run, pending } = useAction();
   const categories = useList("categories");
   const session = useSession();
+  const { household } = useFinance();
   const openReceipt = useUIStore((s) => s.setReceiptOpen);
   const setQuickAdd = useUIStore((s) => s.setQuickAdd);
 
@@ -104,7 +110,7 @@ export function TransactionForm({
 
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-4" noValidate>
-      {!initial && (
+      {!initial && !lockType && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <Tabs
             value={type === "income" ? "income" : "expense"}
@@ -171,6 +177,16 @@ export function TransactionForm({
       <Field label="Notes (optional)">
         <Textarea {...register("notes")} rows={2} />
       </Field>
+      {(() => {
+        const start = household?.openingBalanceDate;
+        const d = watch("date");
+        if (!start || !d || d >= localDate(start, tz)) return null;
+        return (
+          <p className="rounded-lg bg-slate-50 p-3 text-xs text-muted">
+            This is dated before you started tracking on {fmtDate(start, tz, "d MMM yyyy")}. It will appear in your history and charts, but it won&apos;t change your available balance — that money was already spent when you entered your starting balance.
+          </p>
+        );
+      })()}
       {!canSave && <p className="text-xs text-danger">Your role can&apos;t {initial ? "edit" : "add"} transactions in this household.</p>}
       <div className="flex justify-end gap-2 pt-1">
         <Button type="submit" loading={pending} disabled={!canSave}>

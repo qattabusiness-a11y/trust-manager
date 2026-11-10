@@ -14,10 +14,13 @@ export interface MarketPriceProvider {
   comparePrices(productId: string): Promise<MarketComparison>;
 }
 
-/** Simulated index seeded with illustrative RWF prices. NOT live data. */
-export class MockMarketPriceService implements MarketPriceProvider {
+/**
+ * Serves prices already loaded in the app: prices recorded by the household
+ * and, in development mode only, the simulated index. Not a live feed.
+ */
+export class InAppMarketPriceService implements MarketPriceProvider {
   readonly isLive = false;
-  readonly label = "DEMO DATA — Not verified live market prices.";
+  readonly label = "Prices recorded in Trust Manager";
 
   constructor(private products: MarketProduct[], private history: MarketPricePoint[], private currency = "RWF") {}
 

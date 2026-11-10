@@ -77,9 +77,43 @@ export function inPeriod(iso: string, p: Period): boolean {
   return t >= p.start.getTime() && t < p.end.getTime();
 }
 
-/** Household-local calendar date ("yyyy-MM-dd") of a UTC instant. */
+const dayFormatters = new Map<string, Intl.DateTimeFormat>();
+const localDateCache = new Map<string, string>();
+
+/**
+ * Household-local calendar date ("yyyy-MM-dd") of a UTC instant.
+ * Called for every transaction on every recalculation, so it uses a cached
+ * Intl formatter and memoizes results.
+ */
 export function localDate(iso: string | Date, tz: string): string {
-  return formatInTimeZone(typeof iso === "string" ? new Date(iso) : iso, tz, "yyyy-MM-dd");
+  const key = typeof iso === "string" ? `${tz}|${iso}` : null;
+  if (key) {
+    const hit = localDateCache.get(key);
+    if (hit) return hit;
+  }
+  let fmt = dayFormatters.get(tz);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" });
+    dayFormatters.set(tz, fmt);
+  }
+  const out = fmt.format(typeof iso === "string" ? new Date(iso) : iso);
+  if (key) {
+    if (localDateCache.size > 100_000) localDateCache.clear();
+    localDateCache.set(key, out);
+  }
+  return out;
+}
+
+/** Monday (yyyy-MM-dd) of the week containing a local calendar date. */
+export function weekKeyOf(dateLocal: string): string {
+  const y = +dateLocal.slice(0, 4), m = +dateLocal.slice(5, 7), d = +dateLocal.slice(8, 10);
+  const t = Date.UTC(y, m - 1, d);
+  const dow = (new Date(t).getUTCDay() + 6) % 7; // Monday = 0
+  return new Date(t - dow * 86_400_000).toISOString().slice(0, 10);
+}
+
+export function daysInMonthOf(monthKeyStr: string): number {
+  return new Date(Date.UTC(+monthKeyStr.slice(0, 4), +monthKeyStr.slice(5, 7), 0)).getUTCDate();
 }
 
 export function todayLocal(tz: string, now: Date = new Date()): string {

@@ -29,7 +29,7 @@ export function HardStopBanner({ s }: { s: FinanceSnapshot }) {
           <p className="text-xs text-muted">Recorded balance: {s.fmt(s.balance)}</p>
         </div>
         <div>
-          <p className="text-xs text-muted">Where it went ({h.period === "weekly" ? "this week" : "this month"})</p>
+          <p className="text-xs text-muted">Where it went ({h.period === "weekly" ? "this week" : "today"})</p>
           <ul className="mt-1 space-y-0.5 text-xs">
             {h.breakdown.map((b) => (
               <li key={b.category} className="flex justify-between gap-2"><span>{b.category}</span><span className="money font-medium">{s.fmt(b.amount)}</span></li>

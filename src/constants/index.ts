@@ -7,6 +7,9 @@ export const DEFAULT_THRESHOLDS: StatusThresholds = { caution: 70, warning: 85, 
 export const MAX_RECEIPT_BYTES = 5 * 1024 * 1024;
 export const RECEIPT_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp"] as const;
 
+/** Source label of the simulated price index used only in development mode. */
+export const DEMO_MARKET_SOURCE = "Trust Manager demo index (simulated)";
+
 export const DEMO_DATA_LABEL = "DEMO DATA — Not verified live market prices.";
 
 /** Months of essential spending to keep untouched as an emergency reserve. */

@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import type { z } from "zod";
-import { SavingsGrowthChart } from "@/components/analytics/charts";
+import { SavingsGrowthChart } from "@/components/analytics/lazy";
 import { EmptyState, ErrorState, LoadingState, NoAccess, PageHeader, SimulatedBadge, Stat } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,7 +58,7 @@ export default function SavingsPage() {
       for (const c of chosen) {
         await savingsTransferService.transfer(api, { amount: c.spare, accountId: microAccount.id, goalId: null, source: "micro_sweep", note: `Round-up of ${c.title}`, relatedTransactionId: c.transactionId });
       }
-    }, `${s.fmt(chosen.reduce((x, c) => x + c.spare, 0))} swept to your spare change jar (simulated — no real money moved).`);
+    }, `${s.fmt(chosen.reduce((x, c) => x + c.spare, 0))} set aside in your spare change jar. Remember to move it in MoMo or your bank.`);
   }
 
   async function setPrefs(patch: Partial<NonNullable<typeof prefs>>) {
@@ -144,7 +144,7 @@ export default function SavingsPage() {
               disabled={!prefs || !canManage}
               onChange={(v) => void setPrefs({ autoSweep: v, autoSweepSince: v ? new Date().toISOString() : null })}
               label="Automatic round-up rule"
-              description={`When on, every new expense you record from now on is rounded up to the next ${s.fmt(increment)} and the difference is recorded as saved. It never moves real MoMo or bank money — you transfer it yourself.`}
+              description={`When on, every new expense you record from now on is rounded up to the next ${s.fmt(increment)} and the difference is recorded as saved. Trust Manager keeps the record; it cannot move MoMo or bank money, so you transfer it yourself.`}
             />
             {suggestions.length === 0 ? (
               <p className="text-sm text-muted">No round-ups waiting from the last 30 days.</p>
@@ -199,10 +199,10 @@ export default function SavingsPage() {
       </Dialog>
 
       <Dialog open={!!moving} onOpenChange={(o) => !o && setMoving(null)}>
-        <DialogContent title={moving?.direction === "withdraw" ? `Withdraw from ${moving.goal.name}` : `Add to ${moving?.goal.name}`} description="Recorded in Trust Manager only. Make the actual MoMo or bank transfer yourself.">
-          {moving && <MoveForm fmt={s.fmt} available={s.balance} withdraw={moving.direction === "withdraw"} pending={pending} onSubmit={async (amount) => {
+        <DialogContent title={moving?.direction === "withdraw" ? `Withdraw from ${moving.goal.name}` : `Add to ${moving?.goal.name}`} description="Trust Manager keeps the record. Make the actual MoMo or bank transfer yourself.">
+          {moving && <MoveForm fmt={s.fmt} available={s.balance} saved={goalBalance(moving.goal.id, opening.get(moving.goal.accountId) ?? 0, f.data.contributions)} withdraw={moving.direction === "withdraw"} pending={pending} onSubmit={async (amount) => {
             const r = await run((api) => savingsTransferService.transfer(api, { amount, accountId: moving.goal.accountId, goalId: moving.goal.id, source: "manual", direction: moving.direction }));
-            toast.success(r.message, { description: `Reference ${r.reference}` });
+            toast.success(r.message);
             setMoving(null);
           }} />}
         </DialogContent>
@@ -228,19 +228,19 @@ function GoalForm({ onSubmit, pending }: { onSubmit: (v: GoalValues) => Promise<
   );
 }
 
-function MoveForm({ fmt, available, withdraw, onSubmit, pending }: { fmt: (n: number) => string; available: number; withdraw: boolean; onSubmit: (amount: number) => Promise<void>; pending: boolean }) {
+function MoveForm({ fmt, available, saved, withdraw, onSubmit, pending }: { fmt: (n: number) => string; available: number; saved: number; withdraw: boolean; onSubmit: (amount: number) => Promise<void>; pending: boolean }) {
   const [amount, setAmount] = useState("");
   const [confirm, setConfirm] = useState(false);
   const n = Math.round(Number(amount));
-  const tooMuch = !withdraw && n > available;
+  const tooMuch = withdraw ? n > saved : n > available;
   return (
     <div className="space-y-4">
-      <Field label="Amount" hint={withdraw ? undefined : `Available to move: ${fmt(available)}`} error={tooMuch ? "That's more than your recorded available money." : undefined}>
+      <Field label="Amount" hint={withdraw ? `Saved in this goal: ${fmt(saved)}` : `Available to move: ${fmt(available)}`} error={tooMuch ? (withdraw ? "That's more than this goal holds." : "That's more than your recorded available money.") : undefined}>
         <Input type="number" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
       </Field>
       <label className="flex items-start gap-2 text-sm">
         <input type="checkbox" checked={confirm} onChange={(e) => setConfirm(e.target.checked)} className="mt-1" />
-        <span>I understand this is a <strong>simulated</strong> transfer recorded in Trust Manager. No MoMo or bank money moves.</span>
+        <span>I understand Trust Manager only <strong>records</strong> this. I will move the money myself in MoMo or my bank.</span>
       </label>
       <div className="flex justify-end"><Button disabled={!n || n <= 0 || tooMuch || !confirm} loading={pending} onClick={() => void onSubmit(n)}>{withdraw ? "Record withdrawal" : "Record transfer"}</Button></div>
     </div>

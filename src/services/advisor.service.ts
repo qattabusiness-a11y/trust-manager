@@ -43,8 +43,8 @@ export function personaProfile(p: UserPersona | null, surplus: number): Profile[
  * Deterministic rule-based advisor. Every insight is computed from the
  * household's records — no random or generic advice.
  */
-export class MockFinancialAdvisor implements FinancialAdvisor {
-  readonly provider = "Trust Manager rules engine (mock advisor)";
+export class RuleBasedFinancialAdvisor implements FinancialAdvisor {
+  readonly provider = "Trust Manager rules engine";
 
   private build(ctx: FinancialContext, kinds?: AdvisorInsight["kind"][]): AdvisorResponse {
     const { snapshot: s, data: d, persona } = ctx;
@@ -155,7 +155,7 @@ export class MockFinancialAdvisor implements FinancialAdvisor {
       .map((i) => {
         const product = d.marketProducts.find((p) => p.id === i.marketProductId);
         const cmp = product ? compareProduct(product, current, d.marketHistory, now) : null;
-        return { item: i, result: planVsMarket(i.estimatedUnitPrice, i.quantity, cmp, (n) => fmt(n)) };
+        return { item: i, verified: !!cmp?.verified, result: planVsMarket(i.estimatedUnitPrice, i.quantity, cmp, (n) => fmt(n)) };
       });
     const savingsPossible = overPlanned.filter((o) => o.result.status === "saving_possible");
     const underPlanned = overPlanned.filter((o) => o.result.status === "plan_too_low");
@@ -188,7 +188,7 @@ export class MockFinancialAdvisor implements FinancialAdvisor {
           ...underPlanned.map((o) => `${o.item.productName}: ${o.result.message}`),
         ].join(" "),
         facts: overPlanned.filter((o) => o.result.marketUnitPrice).map((o) => `${o.item.productName}: planned ${fmt(o.item.estimatedUnitPrice)} vs market avg ${fmt(o.result.marketUnitPrice!)} per ${o.item.unit}.`),
-        estimates: ["Market figures come from the demo index — not verified live prices."],
+        estimates: [overPlanned.some((o) => o.verified) ? "Market figures are prices recorded by your household; prices can differ on the day." : "Market figures come from the simulated development index — not real prices."],
         action: { label: "Compare prices", href: "/market" },
       });
     }
@@ -317,4 +317,4 @@ function rank(s: AdvisorInsight["severity"]) {
   return { critical: 0, warning: 1, caution: 2, info: 3, success: 4 }[s];
 }
 
-export const financialAdvisor: FinancialAdvisor = new MockFinancialAdvisor();
+export const financialAdvisor: FinancialAdvisor = new RuleBasedFinancialAdvisor();

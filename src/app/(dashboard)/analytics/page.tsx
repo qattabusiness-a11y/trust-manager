@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarClock, TrendingDown } from "lucide-react";
-import { CategoryDonut, DailyTrendChart, ForecastChart, IncomeExpenseChart, SavingsGrowthChart, WeeklyUtilizationChart } from "@/components/analytics/charts";
+import { CategoryDonut, DailyTrendChart, ForecastChart, IncomeExpenseChart, SavingsGrowthChart, WeeklyUtilizationChart } from "@/components/analytics/lazy";
 import { EmptyState, ErrorState, LoadingState, NoAccess, PageHeader, Stat } from "@/components/shared";
 import { TopPayees } from "@/components/transactions/TopPayees";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";

@@ -1,13 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { createContext, createElement, useContext, useMemo, type ReactNode } from "react";
 import { buildSnapshot, type FinanceData } from "@/lib/calculations/snapshot";
+import { isSupabaseConfigured } from "@/config/env";
+import { DEMO_MARKET_SOURCE } from "@/constants";
 import { monthKey } from "@/lib/dates";
 import { useList } from "./use-data";
 import { useSession } from "./use-session";
 
 /** Loads every record the financial engines need and derives one snapshot. */
-export function useFinance() {
+function useFinanceValue() {
   const session = useSession();
   const households = useList("households");
   const personas = useList("personas");
@@ -50,11 +52,31 @@ export function useFinance() {
       contributions: contributions.data ?? [],
       shoppingItems: shopping.data ?? [],
       marketProducts: products.data ?? [],
-      marketHistory: history.data ?? [],
+      // The simulated index exists only for offline development; a live deployment shows real recorded prices only.
+      marketHistory: isSupabaseConfigured() ? (history.data ?? []).filter((h) => h.source !== DEMO_MARKET_SOURCE) : (history.data ?? []),
     }),
     [household, persona, budget, transactions.data, categories.data, income.data, recurring.data, usage.data, accounts.data, goals.data, contributions.data, shopping.data, products.data, history.data],
   );
 
   const snapshot = useMemo(() => buildSnapshot(data), [data]);
   return { ...session, loading, error, data, snapshot, household, persona, budget, budgetIsCurrentMonth: budget?.month === currentMonth };
+}
+
+type FinanceValue = ReturnType<typeof useFinanceValue>;
+const FinanceContext = createContext<FinanceValue | null>(null);
+
+/**
+ * Computes the financial snapshot ONCE for the whole signed-in app.
+ * Sidebar, header, dialogs and pages all read the same result instead of
+ * each recalculating it.
+ */
+export function FinanceProvider({ children }: { children: ReactNode }) {
+  const value = useFinanceValue();
+  return createElement(FinanceContext.Provider, { value }, children);
+}
+
+export function useFinance(): FinanceValue {
+  const ctx = useContext(FinanceContext);
+  if (!ctx) throw new Error("useFinance must be used inside <FinanceProvider>.");
+  return ctx;
 }

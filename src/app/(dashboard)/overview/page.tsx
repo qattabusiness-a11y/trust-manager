@@ -2,13 +2,15 @@
 
 import { Plus, ScanLine } from "lucide-react";
 import Link from "next/link";
-import { CategoryDonut, DailyTrendChart, IncomeExpenseChart, SavingsGrowthChart, WeeklyUtilizationChart } from "@/components/analytics/charts";
+import { CategoryDonut, DailyTrendChart, IncomeExpenseChart, SavingsGrowthChart, WeeklyUtilizationChart } from "@/components/analytics/lazy";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
+import { GettingStarted } from "@/components/dashboard/GettingStarted";
 import { HardStopBanner } from "@/components/dashboard/HardStopBanner";
 import { OverviewCards } from "@/components/dashboard/OverviewCards";
 import { EmptyState, ErrorState, LoadingState, NoAccess } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useList } from "@/hooks/use-data";
 import { useFinance } from "@/hooks/use-finance";
 import { fmtDate, greeting } from "@/lib/dates";
 import { useUIStore } from "@/stores/preferences.store";
@@ -17,6 +19,7 @@ export default function OverviewPage() {
   const f = useFinance();
   const setQuick = useUIStore((s) => s.setQuickAdd);
   const setReceipt = useUIStore((s) => s.setReceiptOpen);
+  const members = useList("householdMembers");
   if (f.loading) return <LoadingState rows={4} />;
   if (f.error) return <ErrorState error={f.error} />;
   const s = f.snapshot;
@@ -41,6 +44,21 @@ export default function OverviewPage() {
           </div>
         )}
       </div>
+
+      {f.member?.role === "owner" && f.householdId && (
+        <GettingStarted
+          householdId={f.householdId}
+          steps={[
+            { id: "tx", label: "Record your first expense", hint: "Or scan a MoMo receipt — it takes seconds.", done: f.data.transactions.some((t) => t.type === "expense"), onClick: () => setQuick(true) },
+            { id: "income", label: "Add your income", hint: "So forecasts know when money arrives.", done: f.data.income.length > 0, href: "/budget" },
+            { id: "bill", label: "Add a bill or subscription", hint: "Rent, electricity, school fees — get reminders.", done: f.data.recurring.length > 0, href: "/bills" },
+            { id: "shop", label: "Plan your shopping", hint: "List what you need and see if it fits your budget.", done: f.data.shoppingItems.length > 0, href: "/shopping" },
+            { id: "price", label: "Record a market price", hint: "Real prices make comparisons and bulk-buy tips work.", done: f.data.marketHistory.some((h) => h.householdId), href: "/market" },
+            { id: "goal", label: "Create a savings goal", hint: "Emergency fund, school fees, a laptop…", done: f.data.savingsGoals.length > 0, href: "/savings" },
+            { id: "invite", label: "Invite your household", hint: "Share the list without sharing your balances.", done: (members.data ?? []).filter((m) => m.status === "active").length > 1, href: "/household" },
+          ]}
+        />
+      )}
 
       {canBudget && <HardStopBanner s={s} />}
 

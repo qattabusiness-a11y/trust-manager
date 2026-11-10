@@ -261,6 +261,8 @@ export interface ShoppingItem extends HouseholdScoped {
 /* -------------------------------------------------------------- Market */
 
 export interface MarketProduct extends BaseRecord {
+  /** null = shared catalogue item; otherwise a product added by this household. */
+  householdId?: ID | null;
   slug: string;
   name: string;
   category: string;
@@ -282,10 +284,17 @@ export interface MarketPrice {
   currency: string;
   recordedAt: ISODateTime;
   source: string;
+  /** True when this price was recorded by the household (real), false for the demo index. */
+  verified?: boolean;
 }
 
 export interface MarketPricePoint {
   id: ID;
+  /** null = shared index; otherwise a price recorded by this household. */
+  householdId?: ID | null;
+  recordedBy?: ID | null;
+  note?: string | null;
+  deletedAt?: ISODateTime | null;
   productId: ID;
   marketName: string;
   location: string;
@@ -306,6 +315,9 @@ export interface MarketComparison {
   changePct: number;
   source: string;
   recordedAt: ISODateTime;
+  /** True when based only on prices recorded by the household. */
+  verified: boolean;
+  priceCount: number;
 }
 
 /* ---------------------------------------------- Bills & subscriptions */
@@ -428,6 +440,11 @@ export interface ReceiptExtraction {
   transactionReference: string | null;
   paymentMethod: string | null;
   confidence: number;
+  /** Calendar date / wall-clock time exactly as printed on the receipt. */
+  localDate?: string | null;
+  localTime?: string | null;
+  direction?: "expense" | "income";
+  fee?: number | null;
 }
 
 export interface ReceiptProcessingResult {

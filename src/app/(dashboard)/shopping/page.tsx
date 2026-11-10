@@ -180,6 +180,7 @@ export default function ShoppingPage() {
               fmt={s.fmt}
               tz={s.tz}
               canRecord={f.can("add_transactions")}
+              canRecordPrice={canEdit && !!buying.marketProductId}
               pending={pending}
               onSubmit={async (raw) => {
                 const v = purchaseSchema.parse(raw);
@@ -194,6 +195,21 @@ export default function ShoppingPage() {
                     transactionId = tx.id;
                   }
                   await api.update("shoppingItems", buying.id, { status: "bought", actualCost: v.actualCost, merchant: v.merchant, purchasedAt: new Date(`${v.date}T10:00:00Z`).toISOString(), transactionId });
+                  // Real prices come from real purchases: remember what was paid per unit.
+                  if (v.recordPrice && buying.marketProductId && buying.quantity > 0 && api.can("edit_shopping")) {
+                    await api.create("marketPriceHistory", {
+                      householdId: api.actor.householdId!,
+                      recordedBy: api.actor.userId,
+                      productId: buying.marketProductId,
+                      marketName: v.merchant,
+                      location: "",
+                      price: Math.max(1, Math.round(v.actualCost / buying.quantity)),
+                      currency: s.currency,
+                      recordedAt: v.date === todayLocal(s.tz) ? new Date().toISOString() : new Date(`${v.date}T10:00:00Z`).toISOString(),
+                      source: `Purchase recorded by ${f.profile?.fullName ?? "household member"}`,
+                      note: `${buying.quantity} ${buying.unit} for ${s.fmt(v.actualCost)}`,
+                    } as never);
+                  }
                 }, "Moved to Items Bought.");
                 setBuying(null);
                 setTab("bought");
@@ -273,9 +289,9 @@ function ItemForm({ initial, products, comparisons, fmt, tz, onSubmit, pending }
   );
 }
 
-function PurchaseForm({ item, fmt, tz, canRecord, onSubmit, pending }: { item: ShoppingItem; fmt: (n: number) => string; tz: string; canRecord: boolean; onSubmit: (v: PurchaseValues) => Promise<void>; pending: boolean }) {
+function PurchaseForm({ item, fmt, tz, canRecord, canRecordPrice, onSubmit, pending }: { item: ShoppingItem; fmt: (n: number) => string; tz: string; canRecord: boolean; canRecordPrice: boolean; onSubmit: (v: PurchaseValues) => Promise<void>; pending: boolean }) {
   const planned = Math.round(item.estimatedUnitPrice * item.quantity);
-  const form = useForm<PurchaseValues>({ resolver: zodResolver(purchaseSchema), defaultValues: { actualCost: planned, merchant: "", date: todayLocal(tz), paymentMethod: "momo", recordTransaction: canRecord } });
+  const form = useForm<PurchaseValues>({ resolver: zodResolver(purchaseSchema), defaultValues: { actualCost: planned, merchant: "", date: todayLocal(tz), paymentMethod: "momo", recordTransaction: canRecord, recordPrice: canRecordPrice } });
   const actual = form.watch("actualCost") || 0;
   const diff = actual - planned;
   const e = form.formState.errors;
@@ -294,6 +310,9 @@ function PurchaseForm({ item, fmt, tz, canRecord, onSubmit, pending }: { item: S
         <Switch checked={!!form.watch("recordTransaction")} onChange={(v) => form.setValue("recordTransaction", v)} label="Also record the expense" description="Creates a linked transaction so your budget updates." />
       ) : (
         <p className="text-xs text-muted">Your role can mark items bought but not record expenses; the owner will see it on the list.</p>
+      )}
+      {canRecordPrice && (
+        <Switch checked={!!form.watch("recordPrice")} onChange={(v) => form.setValue("recordPrice", v)} label="Remember this price" description={`Saves ${fmt(Math.round(actual / Math.max(item.quantity, 0.0001)))} per ${item.unit} at this shop, so future plans compare against real prices.`} />
       )}
       <div className="flex justify-end"><Button type="submit" loading={pending}>Mark as bought</Button></div>
     </form>

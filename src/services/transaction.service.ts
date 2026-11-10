@@ -64,3 +64,30 @@ export async function saveTransaction(api: Api, input: TransactionInput, opts: S
     createdBy: api.actor.userId,
   });
 }
+
+const isSavingsMove = (tx: Transaction) => tx.type === "savings_transfer" || tx.type === "savings_withdrawal";
+
+/** Savings contributions that were created together with a savings transaction. */
+async function linkedContributions(api: Api, tx: Transaction, deleted: boolean) {
+  if (!isSavingsMove(tx)) return [];
+  const all = await api.list("savingsContributions", { includeDeleted: true });
+  const at = new Date(tx.occurredAt).getTime();
+  return all.filter(
+    (c) => !!c.deletedAt === deleted && Math.abs(c.amount) === tx.amount && (c.transactionId === tx.id || new Date(c.contributedAt).getTime() === at),
+  );
+}
+
+/**
+ * Delete a transaction (soft delete, audited). Deleting a savings transfer
+ * also removes its savings contribution so the available balance and the
+ * savings total stay consistent.
+ */
+export async function removeTransaction(api: Api, tx: Transaction): Promise<void> {
+  for (const c of await linkedContributions(api, tx, false)) await api.remove("savingsContributions", c.id, "Removed with its transaction");
+  await api.remove("transactions", tx.id, "Deleted by user");
+}
+
+export async function restoreTransaction(api: Api, tx: Transaction): Promise<void> {
+  await api.restore("transactions", tx.id);
+  for (const c of await linkedContributions(api, tx, true)) await api.restore("savingsContributions", c.id);
+}

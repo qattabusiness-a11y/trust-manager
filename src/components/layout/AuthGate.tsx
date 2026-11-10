@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useSession } from "@/hooks/use-session";
+import { getPendingInvite } from "@/lib/pending-invite";
 import { LogoMark } from "./Logo";
 
 type Mode = "root" | "guest" | "onboarding" | "app";
@@ -26,6 +27,9 @@ export function AuthGate({ mode, children }: { mode: Mode; children: React.React
     if (mode === "onboarding" && signedIn && onboarded) target = "/overview";
     if (mode === "app" && !signedIn) target = `/login?next=${encodeURIComponent(pathname)}`;
     if (mode === "app" && signedIn && !onboarded) target = "/onboarding";
+    // Someone who followed an invitation link goes back to it after signing in or registering.
+    const invite = signedIn && !s.member ? getPendingInvite() : null;
+    if (invite && (mode === "guest" || mode === "root" || mode === "onboarding")) target = `/invite/${invite}`;
   }
 
   useEffect(() => {

@@ -84,7 +84,11 @@ export const TABLES: Record<CollectionKey, string> = {
   auditLogs: "audit_logs",
 };
 
-type Scope = "household" | "user" | "public" | "special";
+/**
+ * "shared" = reference rows everyone can read (householdId null) plus rows a
+ * household added for itself (householdId set), which only it can see or change.
+ */
+type Scope = "household" | "user" | "public" | "shared" | "special";
 
 export interface CollectionPolicy {
   scope: Scope;
@@ -119,8 +123,8 @@ export const POLICIES: Record<CollectionKey, CollectionPolicy> = {
   savingsContributions: { scope: "household", read: "view_balances", create: "manage_savings", update: "manage_savings", remove: "manage_savings", audited: true, soft: true },
   shoppingLists: { scope: "household", read: "view_shopping", create: "edit_shopping", update: "edit_shopping", remove: "edit_shopping", soft: true },
   shoppingItems: { scope: "household", read: "view_shopping", create: "edit_shopping", update: "edit_shopping", remove: "edit_shopping", audited: true, soft: true },
-  marketProducts: { scope: "public" },
-  marketPriceHistory: { scope: "public" },
+  marketProducts: { scope: "shared", create: "edit_shopping", update: "edit_shopping", remove: "edit_shopping" },
+  marketPriceHistory: { scope: "shared", create: "edit_shopping", update: "edit_shopping", remove: "edit_shopping" },
   recurringPayments: { scope: "household", read: "view_budget", create: "manage_recurring", update: "manage_recurring", remove: "manage_recurring", audited: true, soft: true },
   subscriptionUsage: { scope: "household", read: "view_budget", create: "manage_recurring", update: "manage_recurring", remove: "manage_recurring" },
   notifications: { scope: "household" },
