@@ -23,6 +23,9 @@ export class GeminiError extends Error {
 
 type Body = Record<string, unknown>;
 
+/** Remembers which request format Google accepted, so later messages use one request each (free quota counts requests). */
+let workingFormat = 0;
+
 function bodies(prompt: string, schema: object): Body[] {
   const contents = [{ role: "user", parts: [{ text: prompt }] }];
   const base = { temperature: 0, maxOutputTokens: 2048 };
@@ -52,7 +55,9 @@ export async function geminiJson(prompt: string, schema: object, opts: { apiKey:
   const model = (opts.model || DEFAULT_GEMINI_MODEL).replace(/[^a-z0-9.\-]/gi, "");
   const doFetch = opts.fetchImpl ?? fetch;
   let lastError: GeminiError | null = null;
-  for (const body of bodies(prompt, schema)) {
+  const all = bodies(prompt, schema);
+  for (let i = workingFormat; i < all.length; i++) {
+    const body = all[i]!;
     const res = await doFetch(`${ENDPOINT}/${model}:generateContent`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-goog-api-key": opts.apiKey },
@@ -62,6 +67,7 @@ export async function geminiJson(prompt: string, schema: object, opts: { apiKey:
     if (res.ok) {
       const json = (await res.json()) as { candidates?: { content?: { parts?: { text?: string; thought?: boolean }[] } }[] };
       const text = (json.candidates?.[0]?.content?.parts ?? []).filter((p) => !p.thought && p.text).map((p) => p.text).join("");
+      workingFormat = i;
       if (!text) throw new GeminiError("The model returned an empty answer.", 502);
       return extractJson(text);
     }

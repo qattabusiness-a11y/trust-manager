@@ -14,25 +14,30 @@ export const dynamic = "force-dynamic";
  *   → { configured: false } when GEMINI_API_KEY isn't set (the app then uses
  *     its built-in reader).
  *
- * Only the message, today's date, savings-goal names and product names are
- * sent to Google. Balances and history never leave the app; questions are
- * answered on the device from the person's own figures. Receipt images and
- * statement files are read on the device and are never sent here.
+ * Sent to Google: the message, the last few chat messages, today's date,
+ * savings-goal and product names, and a short permission-checked summary of
+ * the household's totals. The list of transactions is never sent. Receipt
+ * images and statement files are read on the device and are never sent here.
  * Drafts are checked here and validated again by the app when saved.
  */
 
-/** In online mode, only signed-in people can use the model (protects your quota). */
-async function signedIn(req: Request): Promise<boolean> {
+/**
+ * In online mode, only signed-in people can use the model (protects your quota).
+ * Returns the user's id, "offline" in offline mode, or null when not signed in.
+ */
+async function signedIn(req: Request): Promise<string | null> {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase" || !url || !anon) return true; // offline mode has no server accounts
+  if (process.env.NEXT_PUBLIC_DATA_MODE !== "supabase" || !url || !anon) return "offline"; // offline mode has no server accounts
   const token = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!token) return false;
+  if (!token) return null;
   try {
     const res = await fetch(`${url}/auth/v1/user`, { headers: { apikey: anon, Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8000) });
-    return res.ok;
+    if (!res.ok) return null;
+    const user = (await res.json()) as { id?: string };
+    return user.id ?? null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -41,9 +46,13 @@ export async function POST(req: Request) {
   if (!apiKey) {
     return NextResponse.json({ configured: false, message: "No AI model configured; the built-in assistant is used." });
   }
-  const limit = rateLimit(clientKey(req, "assistant"), 20, 60_000);
+  // Light per-network guard first, then the real limit per signed-in person
+  // (people on the same Wi-Fi share a network address, e.g. at a pitch).
+  if (!rateLimit(clientKey(req, "assistant-ip"), 120, 60_000).ok) return NextResponse.json({ error: "Too many messages. Please wait a moment." }, { status: 429 });
+  const userId = await signedIn(req);
+  if (!userId) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
+  const limit = rateLimit(userId === "offline" ? clientKey(req, "assistant") : `assistant:user:${userId}`, 20, 60_000);
   if (!limit.ok) return NextResponse.json({ error: "Too many messages. Please wait a moment." }, { status: 429, headers: { "Retry-After": String(limit.retryAfter) } });
-  if (!(await signedIn(req))) return NextResponse.json({ error: "Please sign in again." }, { status: 401 });
 
   let body: unknown;
   try {
