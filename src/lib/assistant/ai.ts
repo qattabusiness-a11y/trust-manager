@@ -13,7 +13,7 @@ import type { Draft, ParseResult, QuestionTopic } from "./types";
 
 export const AI_QUESTION_TOPICS = [
   "spent_today", "spent_week", "spent_month", "balance", "budget_left", "safe_today",
-  "savings", "top_category", "top_payee", "bills_due", "run_out", "income_month", "help",
+  "savings", "top_category", "top_payee", "bills_due", "run_out", "income_month", "about", "help",
 ] as const satisfies readonly QuestionTopic[];
 
 export const AI_CATEGORY_KEYS = Object.keys(CAT) as (keyof typeof CAT)[];
@@ -32,6 +32,8 @@ export const assistantRequestSchema = z.object({
     .array(z.object({ id: z.string().max(64), name: z.string().max(120), slug: z.string().max(80).default(""), unit: z.string().max(20), category: z.string().max(60).default("") }))
     .max(300)
     .default([]),
+  history: z.array(z.object({ role: z.enum(["user", "assistant"]), text: z.string().max(600) })).max(10).default([]),
+  facts: z.array(z.string().max(300)).max(16).default([]),
 });
 export type AssistantRequest = z.infer<typeof assistantRequestSchema>;
 
@@ -67,8 +69,9 @@ export const AI_OUTPUT_SCHEMA = {
     },
     questions: { type: "array", items: { type: "string", enum: [...AI_QUESTION_TOPICS] } },
     saveRequested: { type: "boolean" },
+    reply: { type: "string", description: "Your friendly chat reply to the person, in their language." },
   },
-  required: ["items", "questions"],
+  required: ["reply", "items", "questions"],
 } as const;
 
 const CATEGORY_HELP = AI_CATEGORY_KEYS.map((k) => {
@@ -79,7 +82,31 @@ const CATEGORY_HELP = AI_CATEGORY_KEYS.map((k) => {
 export function buildPrompt(req: AssistantRequest): string {
   const goals = req.goals.length ? req.goals.map((g) => `${g.id}: ${g.name}`).join("\n") : "(none)";
   const products = req.products.length ? req.products.slice(0, 120).map((p) => `${p.id}: ${p.name} (per ${p.unit})`).join("\n") : "(none)";
-  return `You turn a household's message about money into records for the Trust Manager app (Rwanda, amounts in RWF).
+  const lang = req.language === "rw" ? "Kinyarwanda" : "English";
+  const history = req.history.length ? req.history.map((h) => `${h.role === "user" ? "Person" : "You"}: ${h.text}`).join("\n") : "(start of chat)";
+  const facts = req.facts.length ? req.facts.map((f) => `- ${f}`).join("\n") : "(not available)";
+  return `You are Trust Assistant, the friendly money helper inside the Trust Manager household finance app (Rwanda, amounts in RWF).
+You do two things for every message:
+1. "reply": talk to the person like a kind, practical friend.
+   - Answer in the language the person wrote in (Kinyarwanda or English; mixed is fine). Their app language is ${lang}.
+   - Keep it short: 1-3 sentences, plain words, no markdown, at most one emoji.
+   - If they told you about money (spent, earned, saved, bills, prices), confirm briefly what you understood, e.g. "Got it, I'm saving rice 1,500 RWF and beans 300 RWF under groceries." The app saves the records and shows them; never say a record failed.
+   - If a needed detail is missing (an amount, a price), ask for it in one short question.
+   - For questions about their money, answer ONLY from the household facts below; never invent or estimate numbers that aren't there. If the facts don't cover it, say you can't see that yet and point to the right page (Transactions, Budget, Savings, Analytics, Bills).
+   - For general money questions, give one or two practical tips that fit a Rwandan household (MoMo, markets, school fees, saving groups/ibimina), without promising returns or giving investment advice.
+   - If asked who you are: you're Trust Assistant, here to help them track spending, plan a budget and save, and they can just tell you their day.
+   - If asked who made, built, created or developed you or Trust Manager (any language, e.g. "ninde wagukoze?"): say Trust Manager and Trust Assistant were developed by Qatta Yves.
+   - Greetings and small talk: reply warmly and suggest one thing they can do.
+   - Off-topic requests: politely say you help with household money, and offer something related.
+2. "items" and "questions": the structured records described below.
+
+Household facts (from their own records, today):
+${facts}
+
+Recent chat (oldest first):
+${history}
+
+Records rules: you turn a household's message about money into records for the app.
 The message may be English, Kinyarwanda or a mix, and may have spelling mistakes ("brought" usually means "bought", "to day" means "today", "frw"/"rwf" is the currency, "5k" = 5000, "ibihumbi bitanu" = 5000).
 
 Today is ${req.today} (household time ${req.nowTime}). "Yesterday"/"ejo hashize" is the day before. "Ejo" alone usually means yesterday when talking about spending.
@@ -232,5 +259,6 @@ export function normalizeAiOutput(raw: unknown, req: AssistantRequest): ParseRes
   }
 
   const questions = out.data.questions.filter((q): q is QuestionTopic => (AI_QUESTION_TOPICS as readonly string[]).includes(q));
-  return { drafts, questions: [...new Set(questions)], saveRequested: !!out.data.saveRequested };
+  const reply = typeof (raw as { reply?: unknown }).reply === "string" ? clip((raw as { reply: string }).reply, 1200) : "";
+  return { drafts, questions: [...new Set(questions)], saveRequested: !!out.data.saveRequested, ...(reply ? { reply } : {}) };
 }

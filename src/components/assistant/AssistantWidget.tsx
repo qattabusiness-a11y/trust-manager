@@ -14,7 +14,7 @@ import { parseCsvStatement, parseTextStatement } from "@/lib/assistant/statement
 import type { Draft, TransactionDraft } from "@/lib/assistant/types";
 import { localDate, todayLocal } from "@/lib/dates";
 import { cn, uuid } from "@/lib/utils";
-import { answer, applyDraft, assistantProvider, buildContext, draftIsComplete, enrichDrafts, permissionFor } from "@/services/assistant.service";
+import { answer, applyDraft, assistantProvider, buildContext, draftIsComplete, enrichDrafts, FACT_TOPICS, permissionFor } from "@/services/assistant.service";
 import { ocrService, ReceiptProcessingError, warmUpOcr } from "@/services/ocr.service";
 import { useAssistantStore, type ChatMessage } from "@/stores/assistant.store";
 import { useDisplayStore } from "@/stores/display.store";
@@ -64,24 +64,35 @@ export function AssistantWidget() {
     const msg = raw.trim();
     if (!msg || thinking) return;
     setText("");
+    // Recent turns so the AI can follow the conversation.
+    const history = messages
+      .filter((m) => m.text.trim())
+      .slice(-8)
+      .map((m) => ({ role: m.role === "user" ? ("user" as const) : ("assistant" as const), text: m.text }));
     push({ id: uuid(), role: "user", text: msg });
     setThinking(true);
     try {
-      const ctx = buildContext(f.data, tz);
+      const ctx = {
+        ...buildContext(f.data, tz),
+        history,
+        facts: FACT_TOPICS.map((q) => answer(q, f.snapshot, f.data, f.can, lang)),
+      };
       const result = await assistantProvider.interpret(msg, ctx, lang);
       const drafts = enrichDrafts(result.drafts, f.data, currency);
-      const answers = result.questions.map((q) => answer(q, f.snapshot, f.data, f.can, lang));
+      // The AI's own reply leads; figures it was given come from the app.
+      const answers = result.reply ? [] : result.questions.map((q) => answer(q, f.snapshot, f.data, f.can, lang));
+      if (result.reply && !drafts.length) say(result.reply);
       if (answers.length) say(answers.join("\n\n"));
       if (drafts.length) {
         // Typed messages are saved straight away when every detail is there;
         // anything incomplete stays as a card to finish.
         const ready = drafts.filter((d) => d.include && draftIsComplete(d) && f.can(permissionFor(d)));
-        const id = say(ready.length ? t("ai.savingNow") : drafts.length === 1 ? t("ai.understoodOne") : t("ai.understood"), drafts);
+        const id = say(result.reply || (ready.length ? t("ai.savingNow") : drafts.length === 1 ? t("ai.understoodOne") : t("ai.understood")), drafts);
         if (ready.length) {
-          await saveAll({ id, role: "assistant", text: "", drafts, status: {} }, ready.length < drafts.length);
+          await saveAll({ id, role: "assistant", text: "", drafts, status: {} }, ready.length < drafts.length, !!result.reply);
         }
       }
-      if (!answers.length && !drafts.length) say(t("ai.nothing"));
+      if (!answers.length && !drafts.length && !result.reply) say(t("ai.nothing"));
     } finally {
       setThinking(false);
     }
@@ -146,7 +157,7 @@ export function AssistantWidget() {
     patch(msgId, (m) => ({ ...m, drafts: m.drafts?.map((x) => (x.id === d.id ? d : x)) }));
   }
 
-  async function saveAll(m: ChatMessage, someLeft = false) {
+  async function saveAll(m: ChatMessage, someLeft = false, short = false) {
     const targets = (m.drafts ?? []).filter((d) => d.include && m.status?.[d.id] !== "saved" && f.can(permissionFor(d)) && draftIsComplete(d));
     if (!targets.length) return;
     patch(m.id, (x) => ({ ...x, status: { ...x.status, ...Object.fromEntries(targets.map((d) => [d.id, "saving" as const])) } }));
@@ -164,7 +175,7 @@ export function AssistantWidget() {
         }
       }
     });
-    say(failed ? t("ai.someFailed", { ok, failed }) : someLeft ? t("ai.needMore") : `${t("ai.savedAll", { n: ok })} ${t("ai.undoHint")}`);
+    say(failed ? t("ai.someFailed", { ok, failed }) : someLeft ? t("ai.needMore") : short ? t("ai.savedShort", { n: ok }) : `${t("ai.savedAll", { n: ok })} ${t("ai.undoHint")}`);
   }
 
   function toggleVoice() {

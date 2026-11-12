@@ -404,6 +404,11 @@ export function parseMessage(rawText: string, ctx: ParseContext): ParseResult {
 
   for (const clause of splitClauses(text)) {
     const t = norm(clause);
+    // "Who developed you?" / "Ninde wagukoze?"
+    if (/\b(who|ninde|nde)\b.*\b(made|make|built|build|created|create|developed|develop|designed|owns)\b|\b(developer|creator|founder)\b|wagukoze|yagukoze|yakoze|uwagukoze|uwakoze|wakoze/.test(t) && !findAmounts(clause).length) {
+      questions.push("about");
+      continue;
+    }
     let intent = intentOf(clause);
     const amounts = findAmounts(clause);
     if (!intent && amounts.length && carryIntent && carryIntent !== "question") intent = carryIntent;

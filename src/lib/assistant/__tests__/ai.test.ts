@@ -110,3 +110,16 @@ describe("geminiJson", () => {
     expect(extractJson('Here you go: {"a":1} thanks')).toEqual({ a: 1 });
   });
 });
+
+describe("conversation", () => {
+  it("passes the reply through and puts history and facts in the prompt", () => {
+    const r2 = assistantRequestSchema.parse({ ...req, history: [{ role: "user", text: "Muraho" }, { role: "assistant", text: "Muraho neza!" }], facts: ["You have RWF 352,200 available."] });
+    const p = buildPrompt(r2);
+    expect(p).toContain("Person: Muraho");
+    expect(p).toContain("You: Muraho neza!");
+    expect(p).toContain("RWF 352,200 available");
+    const out = normalizeAiOutput({ reply: "  I'm Trust Assistant 😊  ", items: [], questions: [] }, r2);
+    expect(out.reply).toBe("I'm Trust Assistant 😊");
+    expect(normalizeAiOutput({ items: [], questions: [] }, r2).reply).toBeUndefined();
+  });
+});

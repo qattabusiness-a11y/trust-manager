@@ -147,3 +147,12 @@ describe("direct save requests", () => {
     expect(r.drafts[0]!.kind).toBe("savings");
   });
 });
+
+describe("about the app", () => {
+  it.each(["who developed you?", "Who made Trust Manager", "ninde wagukoze?", "who is the developer"])("%s → about", (m) => {
+    let i = 0;
+    const r = parseMessage(m, { today: "2026-11-12", nowTime: "12:00", goals: [], products: [], newId: () => `a${++i}` });
+    expect(r.questions).toEqual(["about"]);
+    expect(r.drafts).toEqual([]);
+  });
+});

@@ -88,6 +88,7 @@ export type QuestionTopic =
   | "bills_due"
   | "run_out"
   | "income_month"
+  | "about"
   | "help";
 
 export interface ParseResult {
@@ -95,6 +96,8 @@ export interface ParseResult {
   questions: QuestionTopic[];
   /** The person asked for it to be saved ("put that in my database", "bika"). */
   saveRequested?: boolean;
+  /** A conversational reply written by the AI model (absent with the built-in reader). */
+  reply?: string;
 }
 
 export interface ParseContext {
@@ -103,4 +106,8 @@ export interface ParseContext {
   goals: { id: string; name: string }[];
   products: { id: string; name: string; slug: string; unit: string; category: string }[];
   newId: () => string;
+  /** Recent chat turns, so the AI can follow up ("and yesterday?"). */
+  history?: { role: "user" | "assistant"; text: string }[];
+  /** Short sentences about the household's totals, already permission-checked. */
+  facts?: string[];
 }

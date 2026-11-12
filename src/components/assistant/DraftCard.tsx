@@ -6,6 +6,7 @@ import { Input, Select } from "@/components/ui/inputs";
 import { PAYMENT_METHOD_LABELS } from "@/constants";
 import { useT } from "@/i18n";
 import type { Draft } from "@/lib/assistant/types";
+import { formatMoney } from "@/lib/money";
 import { cn } from "@/lib/utils";
 import { DRAFT_HREF, draftIsComplete } from "@/services/assistant.service";
 import type { DraftStatus } from "@/stores/assistant.store";
@@ -54,11 +55,30 @@ export function DraftCard({
   const set = (patch: Partial<Draft>) => onChange({ ...draft, ...patch } as Draft);
   const amountMissing = "amount" in draft && !draft.amount;
 
+  // Saved: a single tidy line, so the chat stays a conversation.
+  if (status === "saved") {
+    const m = (n: number | null) => (n ? formatMoney(n, currency) : "");
+    const line =
+      draft.kind === "transaction" ? [draft.title, m(draft.amount), categories.find((c) => c.id === draft.categoryId)?.name]
+      : draft.kind === "savings" ? [m(draft.amount), draft.goalName ?? "General savings"]
+      : draft.kind === "shopping" ? [draft.productName, `${draft.quantity} ${draft.unit}`, m(draft.estimatedUnitPrice)]
+      : draft.kind === "price" ? [draft.productName, `${m(draft.price)} / ${draft.unit}`, draft.marketName]
+      : [draft.name, m(draft.amount), draft.frequency];
+    return (
+      <Link href={DRAFT_HREF[draft.kind]} className="flex items-center gap-2 rounded-lg border border-brand/30 bg-brand-light/30 px-2.5 py-2 text-xs hover:bg-brand-light/60">
+        <Check className="size-3.5 shrink-0 text-brand-dark" />
+        <Icon className="size-3.5 shrink-0 text-muted" />
+        <span className="min-w-0 flex-1 truncate"><span className="font-semibold text-navy">{kindLabel}</span> · {line.filter(Boolean).join(" · ")}</span>
+        <span className="shrink-0 font-semibold text-brand-dark">{t("ai.view")}</span>
+      </Link>
+    );
+  }
+
   return (
     <div
       className={cn(
         "rounded-xl border bg-white p-3 text-xs shadow-sm transition-opacity",
-        status === "saved" ? "border-brand/40 bg-brand-light/30" : status === "error" ? "border-danger/50" : draft.include ? "border-line" : "border-dashed border-line opacity-60",
+        status === "error" ? "border-danger/50" : draft.include ? "border-line" : "border-dashed border-line opacity-60",
       )}
     >
       <div className="mb-2 flex items-center gap-2">
@@ -69,11 +89,6 @@ export function DraftCard({
         {draft.kind === "transaction" && draft.duplicateOf && <span className="rounded bg-warn-light px-1.5 py-0.5 text-[10px] text-warn-dark">{t("ai.duplicate")}</span>}
         <span className="ml-auto flex items-center gap-1">
           {status === "saving" && <Loader2 className="size-3.5 animate-spin text-muted" />}
-          {status === "saved" && (
-            <Link href={DRAFT_HREF[draft.kind]} className="flex items-center gap-1 font-semibold text-brand-dark hover:underline">
-              <Check className="size-3.5" /> {t("ai.saved")} · {t("ai.view")}
-            </Link>
-          )}
           {!locked && (
             <button type="button" onClick={onToggle} className="rounded px-1.5 py-0.5 text-muted hover:bg-slate-100" aria-label={draft.include ? t("ai.remove") : t("ai.include")}>
               {draft.include ? <X className="size-3.5" /> : t("ai.include")}
@@ -183,7 +198,7 @@ export function DraftCard({
 
       {draft.note && <p className="mt-2 text-[11px] text-muted">{draft.note}</p>}
       {!allowed && <p className="mt-2 text-[11px] text-danger">{t("ai.noPermission")}</p>}
-      {allowed && draft.include && !complete && status !== "saved" && (
+      {allowed && draft.include && !complete && (
         <p className="mt-2 flex items-center gap-1 text-[11px] text-warn-dark"><AlertTriangle className="size-3" /> {t("ai.needed")}</p>
       )}
       {status === "error" && error && <p className="mt-2 text-[11px] text-danger">{error}</p>}

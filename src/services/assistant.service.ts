@@ -68,13 +68,16 @@ export class RemoteAssistant implements AssistantProvider {
             nowTime: ctx.nowTime,
             goals: ctx.goals,
             products: ctx.products.map((p) => ({ id: p.id, name: p.name, slug: p.slug, unit: p.unit, category: p.category })),
+            history: (ctx.history ?? []).slice(-8).map((h) => ({ role: h.role, text: h.text.slice(0, 600) })),
+            facts: (ctx.facts ?? []).slice(0, 16).map((x) => x.slice(0, 300)),
           }),
         });
         if (res.ok) {
           const json = (await res.json()) as ParseResult & { configured?: boolean };
           if (json.configured === false) this.disabled = true; // not configured: stop asking
-          else if (Array.isArray(json.drafts) && (json.drafts.length || json.questions?.length)) {
+          else if (Array.isArray(json.drafts) && (json.drafts.length || json.questions?.length || json.reply)) {
             return {
+              reply: typeof json.reply === "string" ? json.reply : undefined,
               drafts: json.drafts.map((d) => ({ ...d, id: ctx.newId() })),
               questions: json.questions ?? [],
               // The built-in reader also recognises "put it in my database".
@@ -285,12 +288,19 @@ export async function applyDraft(api: Api, d: Draft, env: ApplyEnv): Promise<voi
 /* ---------------------------------------------------------------------
  * Answers to questions, computed from the same snapshot the dashboard uses.
  * ------------------------------------------------------------------- */
+/** Topics summarised for the AI model so it can talk about the household's money. */
+export const FACT_TOPICS: QuestionTopic[] = ["balance", "spent_today", "spent_week", "spent_month", "budget_left", "safe_today", "savings", "top_category", "bills_due", "run_out", "income_month"];
+
 export function answer(topic: QuestionTopic, s: FinanceSnapshot, data: FinanceData, can: (p: Permission) => boolean, lang: Language): string {
   const rw = lang === "rw";
   const fmt = (n: number) => s.fmt(n);
   const noAccess = rw ? "Uruhare rwawe ntirukwemerera kubona aya makuru." : "Your role doesn't allow you to see this.";
   const b = s.budget;
   switch (topic) {
+    case "about":
+      return rw
+        ? "Ndi Trust Assistant, umufasha wa Trust Manager. Trust Manager yakozwe na Qatta Yves."
+        : "I'm Trust Assistant, the helper inside Trust Manager. Trust Manager was developed by Qatta Yves.";
     case "spent_today":
       if (!can("view_transactions") || !b) return noAccess;
       return rw ? `Uyu munsi wakoresheje ${fmt(b.day.spent)} ku rugero rwa ${fmt(b.limits.daily)}.` : `Today you've spent ${fmt(b.day.spent)} of your ${fmt(b.limits.daily)} daily limit.`;
