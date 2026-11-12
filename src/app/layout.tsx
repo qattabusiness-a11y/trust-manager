@@ -8,8 +8,13 @@ export const metadata: Metadata = {
   title: { default: "Trust Manager", template: "%s · Trust Manager" },
   description: "AI-powered household financial management and budgeting — built for households in Rwanda and beyond.",
   applicationName: "Trust Manager",
-  
-  icons: { icon: "/icon.png", apple: "/brand/icon-192.png" },
+  icons: {
+    icon: [{ url: "/icon.png" }, { url: "/brand/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: [{ url: "/brand/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  // iPhone: open full-screen from the home screen, with this name under the icon.
+  appleWebApp: { capable: true, title: "Trust Manager", statusBarStyle: "default" },
+  formatDetection: { telephone: false },
 };
 
 export const viewport: Viewport = {

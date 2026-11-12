@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { Toaster } from "sonner";
+import { PwaSetup } from "@/components/pwa/install";
 import { AuthSync } from "./AuthSync";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -28,6 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={client}>
       <AuthSync />
+      <PwaSetup />
       {children}
       <Toaster position="top-center" richColors closeButton toastOptions={{ className: "font-sans" }} />
     </QueryClientProvider>

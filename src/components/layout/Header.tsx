@@ -2,7 +2,7 @@
 
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { formatDistanceToNow } from "date-fns";
-import { Bell, CheckCheck, FlaskConical, LogOut, Plus, ScanLine, Settings as SettingsIcon } from "lucide-react";
+import { Bell, CheckCheck, FlaskConical, LogOut, Plus, ScanLine, Settings as SettingsIcon, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -137,6 +137,9 @@ export function Header({ baseCurrency }: { baseCurrency: string }) {
             <DropdownMenu.Separator className="my-1 h-px bg-line" />
             <DropdownMenu.Item asChild className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none data-[highlighted]:bg-slate-50">
               <Link href="/settings"><SettingsIcon className="size-4" /> {t("header.settings")}</Link>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item asChild className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm outline-none data-[highlighted]:bg-slate-50">
+              <Link href="/install"><Smartphone className="size-4" /> {t("install.menu")}</Link>
             </DropdownMenu.Item>
             <DropdownMenu.Item onSelect={() => void doLogout()} className="flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-danger outline-none data-[highlighted]:bg-danger-light/50">
               <LogOut className="size-4" /> {t("header.signOut")}

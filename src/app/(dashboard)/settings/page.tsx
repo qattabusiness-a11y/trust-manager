@@ -5,6 +5,7 @@ import { Database, Download, FlaskConical, RotateCcw, Trash2, UserCog } from "lu
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { InstallAppCard } from "@/components/pwa/install";
 import { ConfirmDialog, ErrorState, LoadingState, PageHeader } from "@/components/shared";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -59,6 +60,8 @@ export default function SettingsPage() {
       <PageHeader title="Settings" description="Your profile, notifications, data and development tools." />
 
       {persona ? <ProfileCard key={persona.id} persona={persona} fullName={s.profile?.fullName ?? ""} userId={s.userId!} /> : null}
+
+      <InstallAppCard />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>
