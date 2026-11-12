@@ -14,6 +14,8 @@ import type { Permission } from "@/types";
 import { savingsTransferService } from "./savings.service";
 import { saveTransaction } from "./transaction.service";
 import { formatInTimeZone } from "date-fns-tz";
+import { isSupabaseConfigured } from "@/config/env";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 /* ---------------------------------------------------------------------
  * Provider contract. Today the built-in rule engine understands messages
@@ -33,32 +35,58 @@ export class RuleBasedAssistant implements AssistantProvider {
   }
 }
 
+async function authHeader(): Promise<Record<string, string>> {
+  if (!isSupabaseConfigured()) return {};
+  try {
+    const { data } = await getSupabaseBrowserClient().auth.getSession();
+    return data.session ? { Authorization: `Bearer ${data.session.access_token}` } : {};
+  } catch {
+    return {};
+  }
+}
+
 /**
- * Calls /api/assistant (an AI model, once configured on the server). If no
- * model is configured or the call fails, falls back to the built-in engine.
+ * Calls /api/assistant (Google Gemini when GEMINI_API_KEY is set on the
+ * server). If no model is configured, the call fails, or the model finds
+ * nothing, the built-in engine is used instead, so the assistant always works.
  */
 export class RemoteAssistant implements AssistantProvider {
   readonly name = "AI assistant";
   private fallback = new RuleBasedAssistant();
   private disabled = false;
   async interpret(text: string, ctx: ParseContext, lang: Language): Promise<ParseResult> {
+    const local = await this.fallback.interpret(text, ctx);
     if (!this.disabled) {
       try {
         const res = await fetch("/api/assistant", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, language: lang, today: ctx.today, goals: ctx.goals, products: ctx.products.map((p) => ({ id: p.id, name: p.name, unit: p.unit })) }),
+          headers: { "Content-Type": "application/json", ...(await authHeader()) },
+          body: JSON.stringify({
+            text,
+            language: lang,
+            today: ctx.today,
+            nowTime: ctx.nowTime,
+            goals: ctx.goals,
+            products: ctx.products.map((p) => ({ id: p.id, name: p.name, slug: p.slug, unit: p.unit, category: p.category })),
+          }),
         });
         if (res.ok) {
           const json = (await res.json()) as ParseResult & { configured?: boolean };
           if (json.configured === false) this.disabled = true; // not configured: stop asking
-          else if (Array.isArray(json.drafts)) return { drafts: json.drafts.map((d) => ({ ...d, id: ctx.newId() })), questions: json.questions ?? [], saveRequested: json.saveRequested };
+          else if (Array.isArray(json.drafts) && (json.drafts.length || json.questions?.length)) {
+            return {
+              drafts: json.drafts.map((d) => ({ ...d, id: ctx.newId() })),
+              questions: json.questions ?? [],
+              // The built-in reader also recognises "put it in my database".
+              saveRequested: json.saveRequested || local.saveRequested,
+            };
+          }
         }
       } catch {
         /* network problem — use the built-in engine */
       }
     }
-    return this.fallback.interpret(text, ctx);
+    return local;
   }
 }
 
